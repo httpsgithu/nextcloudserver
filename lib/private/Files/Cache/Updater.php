@@ -189,6 +189,7 @@ class Updater implements IUpdater {
 
 		if ($sourceCache->inCache($source)) {
 			if ($this->cache->inCache($target)) {
+				\OC::$server->getLogger()->warning('deleting existing target cache entries for overwrite');
 				$this->cache->remove($target);
 			}
 
