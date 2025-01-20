@@ -1,40 +1,20 @@
 /**
- * @copyright Copyright (c) 2016 Julius Härtl <jus@bitgrid.net>
- *
- * @author John Molakvoæ <skjnldsv@protonmail.com>
- * @author Julius Härtl <jus@bitgrid.net>
- * @author Richard Steinmetz <richard@steinmetz.cloud>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2016 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 import $ from 'jquery'
 import { translate as t } from '@nextcloud/l10n'
-import { getToken } from './OC/requesttoken'
-import getURLParameter from './Util/get-url-parameter'
+import { linkTo } from '@nextcloud/router'
 
-import './jquery/showpassword'
+import { getToken } from './OC/requesttoken.js'
+import getURLParameter from './Util/get-url-parameter.js'
 
-import 'jquery-ui/ui/widgets/button'
+import './jquery/showpassword.js'
+
+import 'jquery-ui/ui/widgets/button.js'
 import 'jquery-ui/themes/base/theme.css'
 import 'jquery-ui/themes/base/button.css'
-
-import 'bootstrap/js/dist/tooltip'
-import './Polyfill/tooltip'
 
 import 'strengthify'
 import 'strengthify/strengthify.css'
@@ -95,14 +75,13 @@ window.addEventListener('DOMContentLoaded', function() {
 		$('.float-spinner').show(250)
 
 		// Disable inputs
-		$(':submit', this).attr('disabled', 'disabled').val($(':submit', this).data('finishing'))
+		$('input[type="submit"]').attr('disabled', 'disabled').val($('input[type="submit"]').data('finishing'))
 		$('input', this).addClass('ui-state-disabled').attr('disabled', 'disabled')
 		// only disable buttons if they are present
 		if ($('#selectDbType').find('.ui-button').length > 0) {
 			$('#selectDbType').buttonset('disable')
 		}
 		$('.strengthify-wrapper, .tipsy')
-			.css('-ms-filter', '"progid:DXImageTransform.Microsoft.Alpha(Opacity=30)"')
 			.css('filter', 'alpha(opacity=30)')
 			.css('opacity', 0.3)
 
@@ -152,7 +131,7 @@ window.addEventListener('DOMContentLoaded', function() {
 	}
 
 	$('#adminpass').strengthify({
-		zxcvbn: OC.linkTo('core', 'vendor/zxcvbn/dist/zxcvbn.js'),
+		zxcvbn: linkTo('core', 'vendor/zxcvbn/dist/zxcvbn.js'),
 		titles: [
 			t('core', 'Very weak password'),
 			t('core', 'Weak password'),
@@ -165,5 +144,13 @@ window.addEventListener('DOMContentLoaded', function() {
 	})
 
 	$('#dbpass').showPassword().keyup()
-	$('#adminpass').showPassword().keyup()
+	$('.toggle-password').click(function(event) {
+		event.preventDefault()
+		const currentValue = $(this).parent().children('input').attr('type')
+		if (currentValue === 'password') {
+			$(this).parent().children('input').attr('type', 'text')
+		} else {
+			$(this).parent().children('input').attr('type', 'password')
+		}
+	})
 })

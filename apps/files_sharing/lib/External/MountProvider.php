@@ -1,29 +1,12 @@
 <?php
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Lukas Reschke <lukas@statuscode.ch>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Robin Appelman <robin@icewind.nl>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 namespace OCA\Files_Sharing\External;
 
+use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\Federation\ICloudIdManager;
 use OCP\Files\Config\IMountProvider;
 use OCP\Files\Storage\IStorageFactory;
@@ -34,29 +17,21 @@ class MountProvider implements IMountProvider {
 	public const STORAGE = '\OCA\Files_Sharing\External\Storage';
 
 	/**
-	 * @var \OCP\IDBConnection
-	 */
-	private $connection;
-
-	/**
 	 * @var callable
 	 */
 	private $managerProvider;
 
 	/**
-	 * @var ICloudIdManager
-	 */
-	private $cloudIdManager;
-
-	/**
-	 * @param \OCP\IDBConnection $connection
+	 * @param IDBConnection $connection
 	 * @param callable $managerProvider due to setup order we need a callable that return the manager instead of the manager itself
 	 * @param ICloudIdManager $cloudIdManager
 	 */
-	public function __construct(IDBConnection $connection, callable $managerProvider, ICloudIdManager $cloudIdManager) {
-		$this->connection = $connection;
+	public function __construct(
+		private IDBConnection $connection,
+		callable $managerProvider,
+		private ICloudIdManager $cloudIdManager,
+	) {
 		$this->managerProvider = $managerProvider;
-		$this->cloudIdManager = $cloudIdManager;
 	}
 
 	public function getMount(IUser $user, $data, IStorageFactory $storageFactory) {
@@ -72,18 +47,19 @@ class MountProvider implements IMountProvider {
 	}
 
 	public function getMountsForUser(IUser $user, IStorageFactory $loader) {
-		$query = $this->connection->prepare('
-				SELECT `remote`, `share_token`, `password`, `mountpoint`, `owner`
-				FROM `*PREFIX*share_external`
-				WHERE `user` = ? AND `accepted` = ?
-			');
-		$query->execute([$user->getUID(), 1]);
+		$qb = $this->connection->getQueryBuilder();
+		$qb->select('remote', 'share_token', 'password', 'mountpoint', 'owner')
+			->from('share_external')
+			->where($qb->expr()->eq('user', $qb->createNamedParameter($user->getUID())))
+			->andWhere($qb->expr()->eq('accepted', $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT)));
+		$result = $qb->executeQuery();
 		$mounts = [];
-		while ($row = $query->fetch()) {
+		while ($row = $result->fetch()) {
 			$row['manager'] = $this;
 			$row['token'] = $row['share_token'];
 			$mounts[] = $this->getMount($user, $row, $loader);
 		}
+		$result->closeCursor();
 		return $mounts;
 	}
 }

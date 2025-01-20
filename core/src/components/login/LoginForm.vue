@@ -1,48 +1,37 @@
 <!--
-  - @copyright 2019 Christoph Wurst <christoph@winzerhof-wurst.at>
-  -
-  - @author 2019 Christoph Wurst <christoph@winzerhof-wurst.at>
-  -
-  - @license GNU AGPL version 3 or any later version
-  -
-  - This program is free software: you can redistribute it and/or modify
-  - it under the terms of the GNU Affero General Public License as
-  - published by the Free Software Foundation, either version 3 of the
-  - License, or (at your option) any later version.
-  -
-  - This program is distributed in the hope that it will be useful,
-  - but WITHOUT ANY WARRANTY; without even the implied warranty of
-  - MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  - GNU Affero General Public License for more details.
-  -
-  - You should have received a copy of the GNU Affero General Public License
-  - along with this program.  If not, see <http://www.gnu.org/licenses/>.
-  -->
+  - SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
+-->
 
 <template>
 	<form ref="loginForm"
+		class="login-form"
 		method="post"
 		name="login"
 		:action="loginActionUrl"
 		@submit="submit">
-		<fieldset>
-			<div v-if="apacheAuthFailed"
-				class="warning">
-				{{ t('core', 'Server side authentication failed!') }}<br>
-				<small>{{ t('core', 'Please contact your administrator.') }}
-				</small>
-			</div>
-			<div v-for="(message, index) in messages"
-				:key="index"
-				class="warning">
-				{{ message }}<br>
-			</div>
-			<div v-if="internalException"
-				class="warning">
-				{{ t('core', 'An internal error occurred.') }}<br>
-				<small>{{ t('core', 'Please try again or contact your administrator.') }}
-				</small>
-			</div>
+		<fieldset class="login-form__fieldset" data-login-form>
+			<NcNoteCard v-if="apacheAuthFailed"
+				:title="t('core', 'Server side authentication failed!')"
+				type="warning">
+				{{ t('core', 'Please contact your administrator.') }}
+			</NcNoteCard>
+			<NcNoteCard v-if="csrfCheckFailed"
+				:heading="t('core', 'Temporary error')"
+				type="error">
+				{{ t('core', 'Please try again.') }}
+			</NcNoteCard>
+			<NcNoteCard v-if="messages.length > 0">
+				<div v-for="(message, index) in messages"
+					:key="index">
+					{{ message }}<br>
+				</div>
+			</NcNoteCard>
+			<NcNoteCard v-if="internalException"
+				:class="t('core', 'An internal error occurred.')"
+				type="warning">
+				{{ t('core', 'Please try again or contact your administrator.') }}
+			</NcNoteCard>
 			<div id="message"
 				class="hidden">
 				<img class="float-spinner"
@@ -52,55 +41,40 @@
 				<!-- the following div ensures that the spinner is always inside the #message div -->
 				<div style="clear: both;" />
 			</div>
-			<p class="grouptop"
-				:class="{shake: invalidPassword}">
-				<input id="user"
-					ref="user"
-					v-model="user"
-					type="text"
-					name="user"
-					autocapitalize="off"
-					:autocomplete="autoCompleteAllowed ? 'on' : 'off'"
-					:placeholder="t('core', 'Username or email')"
-					:aria-label="t('core', 'Username or email')"
-					required
-					@change="updateUsername">
-				<label for="user" class="infield">{{ t('core', 'Username or email') }}</label>
-			</p>
+			<h2 class="login-form__headline" data-login-form-headline>
+				{{ headlineText }}
+			</h2>
+			<NcTextField id="user"
+				ref="user"
+				:label="loginText"
+				name="user"
+				:maxlength="255"
+				:value.sync="user"
+				:class="{shake: invalidPassword}"
+				autocapitalize="none"
+				:spellchecking="false"
+				:autocomplete="autoCompleteAllowed ? 'username' : 'off'"
+				required
+				:error="userNameInputLengthIs255"
+				:helper-text="userInputHelperText"
+				data-login-form-input-user
+				@change="updateUsername" />
 
-			<p class="groupbottom"
-				:class="{shake: invalidPassword}">
-				<input id="password"
-					ref="password"
-					:type="passwordInputType"
-					class="password-with-toggle"
-					name="password"
-					:autocomplete="autoCompleteAllowed ? 'on' : 'off'"
-					:placeholder="t('core', 'Password')"
-					:aria-label="t('core', 'Password')"
-					required>
-				<label for="password"
-					class="infield">{{ t('Password') }}</label>
-				<a href="#" class="toggle-password" @click.stop.prevent="togglePassword">
-					<img :src="toggleIcon" :alt="t('core', 'Toggle password visibility')">
-				</a>
-			</p>
+			<NcPasswordField id="password"
+				ref="password"
+				name="password"
+				:class="{shake: invalidPassword}"
+				:value.sync="password"
+				:spellchecking="false"
+				autocapitalize="none"
+				:autocomplete="autoCompleteAllowed ? 'current-password' : 'off'"
+				:label="t('core', 'Password')"
+				:helper-text="errorLabel"
+				:error="isError"
+				data-login-form-input-password
+				required />
 
-			<LoginButton :loading="loading" :inverted-colors="invertedColors" />
-
-			<p v-if="invalidPassword"
-				class="warning wrongPasswordMsg">
-				{{ t('core', 'Wrong username or password.') }}
-			</p>
-			<p v-else-if="userDisabled"
-				class="warning userDisabledMsg">
-				{{ t('core', 'User disabled') }}
-			</p>
-
-			<p v-if="throttleDelay && throttleDelay > 5000"
-				class="warning throttledMsg">
-				{{ t('core', 'We have detected multiple invalid login attempts from your IP. Therefore your next login is throttled up to 30 seconds.') }}
-			</p>
+			<LoginButton data-login-form-submit :loading="loading" />
 
 			<input v-if="redirectUrl"
 				type="hidden"
@@ -114,7 +88,7 @@
 				:value="timezoneOffset">
 			<input type="hidden"
 				name="requesttoken"
-				:value="OC.requestToken">
+				:value="requestToken">
 			<input v-if="directLogin"
 				type="hidden"
 				name="direct"
@@ -124,16 +98,30 @@
 </template>
 
 <script>
-import jstz from 'jstimezonedetect'
-import LoginButton from './LoginButton'
-import {
-	generateUrl,
-	imagePath,
-} from '@nextcloud/router'
+import { loadState } from '@nextcloud/initial-state'
+import { translate as t } from '@nextcloud/l10n'
+import { generateUrl, imagePath } from '@nextcloud/router'
+import debounce from 'debounce'
+
+import NcPasswordField from '@nextcloud/vue/dist/Components/NcPasswordField.js'
+import NcTextField from '@nextcloud/vue/dist/Components/NcTextField.js'
+import NcNoteCard from '@nextcloud/vue/dist/Components/NcNoteCard.js'
+
+import AuthMixin from '../../mixins/auth.js'
+import LoginButton from './LoginButton.vue'
 
 export default {
 	name: 'LoginForm',
-	components: { LoginButton },
+
+	components: {
+		LoginButton,
+		NcPasswordField,
+		NcTextField,
+		NcNoteCard,
+	},
+
+	mixins: [AuthMixin],
+
 	props: {
 		username: {
 			type: String,
@@ -155,10 +143,6 @@ export default {
 			type: Number,
 			default: 0,
 		},
-		invertedColors: {
-			type: Boolean,
-			default: false,
-		},
 		autoCompleteAllowed: {
 			type: Boolean,
 			default: true,
@@ -167,20 +151,72 @@ export default {
 			type: Boolean,
 			default: false,
 		},
+		emailStates: {
+			type: Array,
+			default() {
+				return []
+			},
+		},
 	},
+
+	setup() {
+		// non reactive props
+		return {
+			t,
+
+			// Disable escape and sanitize to prevent special characters to be html escaped
+			// For example "J's cloud" would be escaped to "J&#39; cloud". But we do not need escaping as Vue does this in `v-text` automatically
+			headlineText: t('core', 'Log in to {productName}', { productName: OC.theme.name }, undefined, { sanitize: false, escape: false }),
+
+			loginTimeout: loadState('core', 'loginTimeout', 300),
+			requestToken: window.OC.requestToken,
+			timezone: (new Intl.DateTimeFormat())?.resolvedOptions()?.timeZone,
+			timezoneOffset: (-new Date().getTimezoneOffset() / 60),
+		}
+	},
+
 	data() {
 		return {
 			loading: false,
-			timezone: jstz.determine().name(),
-			timezoneOffset: (-new Date().getTimezoneOffset() / 60),
-			user: this.username,
+			user: '',
 			password: '',
-			passwordInputType: 'password',
 		}
 	},
+
 	computed: {
+		/**
+		 * Reset the login form after a long idle time (debounced)
+		 */
+		resetFormTimeout() {
+			// Infinite timeout, do nothing
+			if (this.loginTimeout <= 0) {
+				return () => {}
+			}
+			// Debounce for given timeout (in seconds so convert to milli seconds)
+			return debounce(this.handleResetForm, this.loginTimeout * 1000)
+		},
+
+		isError() {
+			return this.invalidPassword || this.userDisabled
+				|| this.throttleDelay > 5000
+		},
+		errorLabel() {
+			if (this.invalidPassword) {
+				return t('core', 'Wrong login or password.')
+			}
+			if (this.userDisabled) {
+				return t('core', 'This account is disabled')
+			}
+			if (this.throttleDelay > 5000) {
+				return t('core', 'We have detected multiple invalid login attempts from your IP. Therefore your next login is throttled up to 30 seconds.')
+			}
+			return undefined
+		},
 		apacheAuthFailed() {
 			return this.errors.indexOf('apacheAuthFailed') !== -1
+		},
+		csrfCheckFailed() {
+			return this.errors.indexOf('csrfCheckFailed') !== -1
 		},
 		internalException() {
 			return this.errors.indexOf('internalexception') !== -1
@@ -191,35 +227,60 @@ export default {
 		userDisabled() {
 			return this.errors.indexOf('userdisabled') !== -1
 		},
-		toggleIcon() {
-			return imagePath('core', 'actions/toggle.svg')
-		},
 		loadingIcon() {
 			return imagePath('core', 'loading-dark.gif')
 		},
 		loginActionUrl() {
 			return generateUrl('login')
 		},
+		emailEnabled() {
+			return this.emailStates ? this.emailStates.every((state) => state === '1') : 1
+		},
+		loginText() {
+			if (this.emailEnabled) {
+				return t('core', 'Account name or email')
+			}
+			return t('core', 'Account name')
+		},
 	},
+
+	watch: {
+		/**
+		 * Reset form reset after the password was changed
+		 */
+		password() {
+			this.resetFormTimeout()
+		},
+	},
+
 	mounted() {
 		if (this.username === '') {
-			this.$refs.user.focus()
+			this.$refs.user.$refs.inputField.$refs.input.focus()
 		} else {
-			this.$refs.password.focus()
+			this.user = this.username
+			this.$refs.password.$refs.inputField.$refs.input.focus()
 		}
 	},
+
 	methods: {
-		togglePassword() {
-			if (this.passwordInputType === 'password') {
-				this.passwordInputType = 'text'
-			} else {
-				this.passwordInputType = 'password'
-			}
+		/**
+		 * Handle reset of the login form after a long IDLE time
+		 * This is recommended security behavior to prevent password leak on public devices
+		 */
+		handleResetForm() {
+			this.password = ''
 		},
+
 		updateUsername() {
 			this.$emit('update:username', this.user)
 		},
-		submit() {
+		submit(event) {
+			if (this.loading) {
+				// Prevent the form from being submitted twice
+				event.preventDefault()
+				return
+			}
+
 			this.loading = true
 			this.$emit('submit')
 		},
@@ -227,6 +288,21 @@ export default {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+.login-form {
+	text-align: start;
+	font-size: 1rem;
 
+	&__fieldset {
+		width: 100%;
+		display: flex;
+		flex-direction: column;
+		gap: .5rem;
+	}
+
+	&__headline {
+		text-align: center;
+		overflow-wrap: anywhere;
+	}
+}
 </style>

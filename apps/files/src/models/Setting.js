@@ -1,24 +1,6 @@
 /**
- * @copyright Copyright (c) 2019 Gary Kim <gary@garykim.dev>
- * @copyright Copyright (c) 2019 John Molakvoæ <skjnldsv@protonmail.com>
- *
- * @author Gary Kim <gary@garykim.dev>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 export default class Setting {
@@ -33,6 +15,7 @@ export default class Setting {
 	 *
 	 * @since 19.0.0
 	 * @param {string} name the name of this setting
+	 * @param {object} component the component
 	 * @param {Function} component.el function that returns an unmounted dom element to be added
 	 * @param {Function} [component.open] callback for when setting is added
 	 * @param {Function} [component.close] callback for when setting is closed

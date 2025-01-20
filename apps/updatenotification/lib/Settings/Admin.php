@@ -3,77 +3,42 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Julius Härtl <jus@bitgrid.net>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Vincent Petry <vincent@nextcloud.com>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 namespace OCA\UpdateNotification\Settings;
 
 use OCA\UpdateNotification\UpdateChecker;
 use OCP\AppFramework\Http\TemplateResponse;
+use OCP\AppFramework\Services\IInitialState;
+use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\IDateTimeFormatter;
 use OCP\IGroupManager;
+use OCP\IUserManager;
 use OCP\L10N\IFactory;
 use OCP\Settings\ISettings;
 use OCP\Support\Subscription\IRegistry;
 use OCP\Util;
+use Psr\Log\LoggerInterface;
 
 class Admin implements ISettings {
-	/** @var IConfig */
-	private $config;
-	/** @var UpdateChecker */
-	private $updateChecker;
-	/** @var IGroupManager */
-	private $groupManager;
-	/** @var IDateTimeFormatter */
-	private $dateTimeFormatter;
-	/** @var IFactory */
-	private $l10nFactory;
-	/** @var IRegistry */
-	private $subscriptionRegistry;
-
 	public function __construct(
-		IConfig $config,
-		UpdateChecker $updateChecker,
-		IGroupManager $groupManager,
-		IDateTimeFormatter $dateTimeFormatter,
-		IFactory $l10nFactory,
-		IRegistry $subscriptionRegistry
+		private IConfig $config,
+		private IAppConfig $appConfig,
+		private UpdateChecker $updateChecker,
+		private IGroupManager $groupManager,
+		private IDateTimeFormatter $dateTimeFormatter,
+		private IFactory $l10nFactory,
+		private IRegistry $subscriptionRegistry,
+		private IUserManager $userManager,
+		private LoggerInterface $logger,
+		private IInitialState $initialState,
 	) {
-		$this->config = $config;
-		$this->updateChecker = $updateChecker;
-		$this->groupManager = $groupManager;
-		$this->dateTimeFormatter = $dateTimeFormatter;
-		$this->l10nFactory = $l10nFactory;
-		$this->subscriptionRegistry = $subscriptionRegistry;
 	}
 
-	/**
-	 * @return TemplateResponse
-	 */
 	public function getForm(): TemplateResponse {
-		$lastUpdateCheckTimestamp = $this->config->getAppValue('core', 'lastupdatedat');
+		$lastUpdateCheckTimestamp = $this->appConfig->getValueInt('core', 'lastupdatedat');
 		$lastUpdateCheck = $this->dateTimeFormatter->formatDateTime($lastUpdateCheckTimestamp);
 
 		$channels = [
@@ -111,6 +76,7 @@ class Admin implements ISettings {
 			'downloadLink' => empty($updateState['downloadLink']) ? '' : $updateState['downloadLink'],
 			'changes' => $this->filterChanges($updateState['changes'] ?? []),
 			'webUpdaterEnabled' => !$this->config->getSystemValue('upgrade.disable-web', false),
+			'isWebUpdaterRecommended' => $this->isWebUpdaterRecommended(),
 			'updaterEnabled' => empty($updateState['updaterEnabled']) ? false : $updateState['updaterEnabled'],
 			'versionIsEol' => empty($updateState['versionIsEol']) ? false : $updateState['versionIsEol'],
 			'isDefaultUpdateServerURL' => $isDefaultUpdateServerURL,
@@ -118,12 +84,9 @@ class Admin implements ISettings {
 			'notifyGroups' => $this->getSelectedGroups($notifyGroups),
 			'hasValidSubscription' => $hasValidSubscription,
 		];
+		$this->initialState->provideInitialState('data', $params);
 
-		$params = [
-			'json' => json_encode($params),
-		];
-
-		return new TemplateResponse('updatenotification', 'admin', $params, '');
+		return new TemplateResponse('updatenotification', 'admin', [], '');
 	}
 
 	protected function filterChanges(array $changes): array {
@@ -149,8 +112,8 @@ class Admin implements ISettings {
 	}
 
 	/**
-	 * @param array $groupIds
-	 * @return array
+	 * @param list<string> $groupIds
+	 * @return list<array{id: string, displayname: string}>
 	 */
 	protected function getSelectedGroups(array $groupIds): array {
 		$result = [];
@@ -161,27 +124,21 @@ class Admin implements ISettings {
 				continue;
 			}
 
-			$result[] = ['value' => $group->getGID(), 'label' => $group->getDisplayName()];
+			$result[] = ['id' => $group->getGID(), 'displayname' => $group->getDisplayName()];
 		}
 
 		return $result;
 	}
 
-	/**
-	 * @return string the section ID, e.g. 'sharing'
-	 */
 	public function getSection(): string {
 		return 'overview';
 	}
 
-	/**
-	 * @return int whether the form should be rather on the top or bottom of
-	 * the admin section. The forms are arranged in ascending order of the
-	 * priority values. It is required to return a value between 0 and 100.
-	 *
-	 * E.g.: 70
-	 */
 	public function getPriority(): int {
 		return 11;
+	}
+
+	private function isWebUpdaterRecommended(): bool {
+		return (int)$this->userManager->countUsersTotal(100) < 100;
 	}
 }

@@ -1,37 +1,20 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Adrian Brzezinski <adrian.brzezinski@eo.pl>
- * @author Jörn Friedrich Dreyer <jfd@butonic.de>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Robin Appelman <robin@icewind.nl>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 namespace OC\Files\ObjectStore;
 
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\BadResponseException;
-use function GuzzleHttp\Psr7\stream_for;
+use GuzzleHttp\Psr7\Utils;
 use Icewind\Streams\RetryWrapper;
 use OCP\Files\NotFoundException;
 use OCP\Files\ObjectStore\IObjectStore;
 use OCP\Files\StorageAuthException;
+use Psr\Log\LoggerInterface;
 
 const SWIFT_SEGMENT_SIZE = 1073741824; // 1GB
 
@@ -44,11 +27,11 @@ class Swift implements IObjectStore {
 	/** @var SwiftFactory */
 	private $swiftFactory;
 
-	public function __construct($params, SwiftFactory $connectionFactory = null) {
+	public function __construct($params, ?SwiftFactory $connectionFactory = null) {
 		$this->swiftFactory = $connectionFactory ?: new SwiftFactory(
 			\OC::$server->getMemCacheFactory()->createDistributed('swift::'),
 			$params,
-			\OC::$server->getLogger()
+			\OC::$server->get(LoggerInterface::class)
 		);
 		$this->params = $params;
 	}
@@ -73,7 +56,7 @@ class Swift implements IObjectStore {
 		return $this->params['container'];
 	}
 
-	public function writeObject($urn, $stream, string $mimetype = null) {
+	public function writeObject($urn, $stream, ?string $mimetype = null) {
 		$tmpFile = \OC::$server->getTempManager()->getTemporaryFile('swiftwrite');
 		file_put_contents($tmpFile, $stream);
 		$handle = fopen($tmpFile, 'rb');
@@ -81,13 +64,13 @@ class Swift implements IObjectStore {
 		if (filesize($tmpFile) < SWIFT_SEGMENT_SIZE) {
 			$this->getContainer()->createObject([
 				'name' => $urn,
-				'stream' => stream_for($handle),
+				'stream' => Utils::streamFor($handle),
 				'contentType' => $mimetype,
 			]);
 		} else {
 			$this->getContainer()->createLargeObject([
 				'name' => $urn,
-				'stream' => stream_for($handle),
+				'stream' => Utils::streamFor($handle),
 				'segmentSize' => SWIFT_SEGMENT_SIZE,
 				'contentType' => $mimetype,
 			]);

@@ -1,8 +1,7 @@
 <?php
 /**
- * Copyright (c) 2014 Robin Appelman <icewind@owncloud.com>
- * This file is licensed under the Licensed under the MIT license:
- * http://opensource.org/licenses/MIT
+ * SPDX-FileCopyrightText: 2014 Robin Appelman <robin@icewind.nl>
+ * SPDX-License-Identifier: MIT
  */
 
 namespace Icewind\SMB\Wrapped;
@@ -47,7 +46,7 @@ class Connection extends RawConnection {
 	public function clearTillPrompt(): void {
 		$this->write('');
 		do {
-			$promptLine = $this->readLine();
+			$promptLine = $this->readTillPrompt();
 			if ($promptLine === false) {
 				break;
 			}
@@ -56,13 +55,12 @@ class Connection extends RawConnection {
 		if ($this->write('') === false) {
 			throw new ConnectionRefusedException();
 		}
-		$this->readLine();
+		$this->readTillPrompt();
 	}
 
 	/**
 	 * get all unprocessed output from smbclient until the next prompt
 	 *
-	 * @param (callable(string):bool)|null $callback (optional) callback to call for every line read
 	 * @return string[]
 	 * @throws AuthenticationException
 	 * @throws ConnectException
@@ -71,42 +69,22 @@ class Connection extends RawConnection {
 	 * @throws NoLoginServerException
 	 * @throws AccessDeniedException
 	 */
-	public function read(callable $callback = null): array {
+	public function read(): array {
 		if (!$this->isValid()) {
 			throw new ConnectionException('Connection not valid');
 		}
-		$promptLine = $this->readLine(); //first line is prompt
-		if ($promptLine === false) {
-			$this->unknownError($promptLine);
+		$output = $this->readTillPrompt();
+		if ($output === false) {
+			$this->unknownError(false);
 		}
-		$this->parser->checkConnectionError($promptLine);
-
-		$output = [];
-		if (!$this->isPrompt($promptLine)) {
-			$line = $promptLine;
-		} else {
-			$line = $this->readLine();
-		}
-		if ($line === false) {
-			$this->unknownError($promptLine);
-		}
-		while ($line !== false && !$this->isPrompt($line)) { //next prompt functions as delimiter
-			if (is_callable($callback)) {
-				$result = $callback($line);
-				if ($result === false) { // allow the callback to close the connection for infinite running commands
-					$this->close(true);
-					break;
-				}
-			} else {
-				$output[] = $line;
-			}
-			$line = $this->readLine();
-		}
+		$output = explode("\n", $output);
+		// last line contains the prompt
+		array_pop($output);
 		return $output;
 	}
 
 	private function isPrompt(string $line): bool {
-		return mb_substr($line, 0, self::DELIMITER_LENGTH) === self::DELIMITER;
+		return substr($line, 0, self::DELIMITER_LENGTH) === self::DELIMITER;
 	}
 
 	/**
@@ -120,7 +98,7 @@ class Connection extends RawConnection {
 		} else {
 			$error = $this->readError(); // maybe something on stderr
 			if ($error) {
-				throw new ConnectException('Unknown error (' . $error . ')');
+				throw new ConnectException('Unknown error (stderr: ' . $error . ')');
 			} else {
 				throw new ConnectException('Unknown error');
 			}
@@ -132,6 +110,6 @@ class Connection extends RawConnection {
 			// ignore any errors while trying to send the close command, the process might already be dead
 			@$this->write('close' . PHP_EOL);
 		}
-		parent::close($terminate);
+		$this->close_process($terminate);
 	}
 }

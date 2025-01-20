@@ -1,28 +1,9 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Georg Ehrke <oc.list@georgehrke.com>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Lukas Reschke <lukas@statuscode.ch>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 namespace OCA\DAV\CalDAV;
 
@@ -30,6 +11,9 @@ use OCA\DAV\AppInfo\PluginManager;
 use OCA\DAV\CalDAV\Integration\ExternalCalendar;
 use OCA\DAV\CalDAV\Integration\ICalendarProvider;
 use OCA\DAV\CalDAV\Trashbin\TrashbinHome;
+use OCP\IConfig;
+use OCP\IL10N;
+use Psr\Log\LoggerInterface;
 use Sabre\CalDAV\Backend\BackendInterface;
 use Sabre\CalDAV\Backend\NotificationSupport;
 use Sabre\CalDAV\Backend\SchedulingSupport;
@@ -43,19 +27,22 @@ use Sabre\DAV\MkCol;
 
 class CalendarHome extends \Sabre\CalDAV\CalendarHome {
 
-	/** @var \OCP\IL10N */
+	/** @var IL10N */
 	private $l10n;
 
-	/** @var \OCP\IConfig */
+	/** @var IConfig */
 	private $config;
 
 	/** @var PluginManager */
 	private $pluginManager;
+	private ?array $cachedChildren = null;
 
-	/** @var bool */
-	private $returnCachedSubscriptions = false;
-
-	public function __construct(BackendInterface $caldavBackend, $principalInfo) {
+	public function __construct(
+		BackendInterface $caldavBackend,
+		array $principalInfo,
+		private LoggerInterface $logger,
+		private bool $returnCachedSubscriptions,
+	) {
 		parent::__construct($caldavBackend, $principalInfo);
 		$this->l10n = \OC::$server->getL10N('dav');
 		$this->config = \OC::$server->getConfig();
@@ -92,10 +79,13 @@ class CalendarHome extends \Sabre\CalDAV\CalendarHome {
 	 * @inheritdoc
 	 */
 	public function getChildren() {
+		if ($this->cachedChildren) {
+			return $this->cachedChildren;
+		}
 		$calendars = $this->caldavBackend->getCalendarsForUser($this->principalInfo['uri']);
 		$objects = [];
 		foreach ($calendars as $calendar) {
-			$objects[] = new Calendar($this->caldavBackend, $calendar, $this->l10n, $this->config);
+			$objects[] = new Calendar($this->caldavBackend, $calendar, $this->l10n, $this->config, $this->logger);
 		}
 
 		if ($this->caldavBackend instanceof SchedulingSupport) {
@@ -131,6 +121,7 @@ class CalendarHome extends \Sabre\CalDAV\CalendarHome {
 			}
 		}
 
+		$this->cachedChildren = $objects;
 		return $objects;
 	}
 
@@ -154,10 +145,19 @@ class CalendarHome extends \Sabre\CalDAV\CalendarHome {
 			return new TrashbinHome($this->caldavBackend, $this->principalInfo);
 		}
 
-		// Calendars
+		// Calendar - this covers all "regular" calendars, but not shared
+		// only check if the method is available
+		if ($this->caldavBackend instanceof CalDavBackend) {
+			$calendar = $this->caldavBackend->getCalendarByUri($this->principalInfo['uri'], $name);
+			if (!empty($calendar)) {
+				return new Calendar($this->caldavBackend, $calendar, $this->l10n, $this->config, $this->logger);
+			}
+		}
+
+		// Fallback to cover shared calendars
 		foreach ($this->caldavBackend->getCalendarsForUser($this->principalInfo['uri']) as $calendar) {
 			if ($calendar['uri'] === $name) {
-				return new Calendar($this->caldavBackend, $calendar, $this->l10n, $this->config);
+				return new Calendar($this->caldavBackend, $calendar, $this->l10n, $this->config, $this->logger);
 			}
 		}
 
@@ -199,10 +199,5 @@ class CalendarHome extends \Sabre\CalDAV\CalendarHome {
 	public function calendarSearch(array $filters, $limit = null, $offset = null) {
 		$principalUri = $this->principalInfo['uri'];
 		return $this->caldavBackend->calendarSearch($principalUri, $filters, $limit, $offset);
-	}
-
-
-	public function enableCachedSubscriptionsForThisRequest() {
-		$this->returnCachedSubscriptions = true;
 	}
 }

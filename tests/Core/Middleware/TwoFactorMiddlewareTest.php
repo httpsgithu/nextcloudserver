@@ -1,23 +1,9 @@
 <?php
 
 /**
- * @author Christoph Wurst <christoph@owncloud.com>
- *
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 
 namespace Test\Core\Middleware;
@@ -31,21 +17,21 @@ use OC\Core\Controller\TwoFactorChallengeController;
 use OC\Core\Middleware\TwoFactorMiddleware;
 use OC\User\Session;
 use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http\RedirectResponse;
 use OCP\AppFramework\Utility\IControllerMethodReflector;
 use OCP\Authentication\TwoFactorAuth\ALoginSetupController;
 use OCP\Authentication\TwoFactorAuth\IProvider;
 use OCP\IConfig;
 use OCP\IRequest;
+use OCP\IRequestId;
 use OCP\ISession;
 use OCP\IURLGenerator;
 use OCP\IUser;
 use OCP\IUserSession;
-use OCP\Security\ISecureRandom;
 use PHPUnit\Framework\MockObject\MockObject;
 use Test\TestCase;
 
 class TwoFactorMiddlewareTest extends TestCase {
-
 	/** @var Manager|MockObject */
 	private $twoFactorManager;
 
@@ -88,7 +74,7 @@ class TwoFactorMiddlewareTest extends TestCase {
 					'REQUEST_URI' => 'test/url'
 				]
 			],
-			$this->createMock(ISecureRandom::class),
+			$this->createMock(IRequestId::class),
 			$this->createMock(IConfig::class)
 		);
 
@@ -96,7 +82,7 @@ class TwoFactorMiddlewareTest extends TestCase {
 		$this->controller = $this->createMock(Controller::class);
 	}
 
-	public function testBeforeControllerNotLoggedIn() {
+	public function testBeforeControllerNotLoggedIn(): void {
 		$this->userSession->expects($this->once())
 			->method('isLoggedIn')
 			->willReturn(false);
@@ -107,7 +93,7 @@ class TwoFactorMiddlewareTest extends TestCase {
 		$this->middleware->beforeController($this->controller, 'index');
 	}
 
-	public function testBeforeSetupController() {
+	public function testBeforeSetupController(): void {
 		$user = $this->createMock(IUser::class);
 		$controller = $this->createMock(ALoginSetupController::class);
 		$this->userSession->expects($this->any())
@@ -122,7 +108,7 @@ class TwoFactorMiddlewareTest extends TestCase {
 		$this->middleware->beforeController($controller, 'create');
 	}
 
-	public function testBeforeControllerNoTwoFactorCheckNeeded() {
+	public function testBeforeControllerNoTwoFactorCheckNeeded(): void {
 		$user = $this->createMock(IUser::class);
 
 		$this->userSession->expects($this->once())
@@ -139,9 +125,9 @@ class TwoFactorMiddlewareTest extends TestCase {
 		$this->middleware->beforeController($this->controller, 'index');
 	}
 
-	
-	public function testBeforeControllerTwoFactorAuthRequired() {
-		$this->expectException(\OC\Authentication\Exceptions\TwoFactorAuthRequiredException::class);
+
+	public function testBeforeControllerTwoFactorAuthRequired(): void {
+		$this->expectException(TwoFactorAuthRequiredException::class);
 
 		$user = $this->createMock(IUser::class);
 
@@ -163,9 +149,9 @@ class TwoFactorMiddlewareTest extends TestCase {
 		$this->middleware->beforeController($this->controller, 'index');
 	}
 
-	
-	public function testBeforeControllerUserAlreadyLoggedIn() {
-		$this->expectException(\OC\Authentication\Exceptions\UserAlreadyLoggedInException::class);
+
+	public function testBeforeControllerUserAlreadyLoggedIn(): void {
+		$this->expectException(UserAlreadyLoggedInException::class);
 
 		$user = $this->createMock(IUser::class);
 
@@ -187,37 +173,37 @@ class TwoFactorMiddlewareTest extends TestCase {
 			->with($user)
 			->willReturn(false);
 
-		$twoFactorChallengeController = $this->getMockBuilder('\OC\Core\Controller\TwoFactorChallengeController')
+		$twoFactorChallengeController = $this->getMockBuilder(TwoFactorChallengeController::class)
 			->disableOriginalConstructor()
 			->getMock();
 		$this->middleware->beforeController($twoFactorChallengeController, 'index');
 	}
 
-	public function testAfterExceptionTwoFactorAuthRequired() {
-		$ex = new \OC\Authentication\Exceptions\TwoFactorAuthRequiredException();
+	public function testAfterExceptionTwoFactorAuthRequired(): void {
+		$ex = new TwoFactorAuthRequiredException();
 
 		$this->urlGenerator->expects($this->once())
 			->method('linkToRoute')
 			->with('core.TwoFactorChallenge.selectChallenge')
 			->willReturn('test/url');
-		$expected = new \OCP\AppFramework\Http\RedirectResponse('test/url');
+		$expected = new RedirectResponse('test/url');
 
 		$this->assertEquals($expected, $this->middleware->afterException($this->controller, 'index', $ex));
 	}
 
-	public function testAfterException() {
-		$ex = new \OC\Authentication\Exceptions\UserAlreadyLoggedInException();
+	public function testAfterException(): void {
+		$ex = new UserAlreadyLoggedInException();
 
 		$this->urlGenerator->expects($this->once())
 			->method('linkToRoute')
 			->with('files.view.index')
 			->willReturn('redirect/url');
-		$expected = new \OCP\AppFramework\Http\RedirectResponse('redirect/url');
+		$expected = new RedirectResponse('redirect/url');
 
 		$this->assertEquals($expected, $this->middleware->afterException($this->controller, 'index', $ex));
 	}
 
-	public function testRequires2FASetupDoneAnnotated() {
+	public function testRequires2FASetupDoneAnnotated(): void {
 		$user = $this->createMock(IUser::class);
 
 		$this->reflector
@@ -264,7 +250,7 @@ class TwoFactorMiddlewareTest extends TestCase {
 	/**
 	 * @dataProvider dataRequires2FASetupDone
 	 */
-	public function testRequires2FASetupDone(array $providers, bool $missingProviders, bool $expectEception) {
+	public function testRequires2FASetupDone(array $providers, bool $missingProviders, bool $expectEception): void {
 		$user = $this->createMock(IUser::class);
 
 		$this->reflector

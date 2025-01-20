@@ -1,49 +1,20 @@
 <?php
 /**
- * @copyright Copyright (c) 2017 Joas Schilling <coding@schilljs.com>
- *
- * @author Bjoern Schiessle <bjoern@schiessle.org>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Daniel Kesselberg <mail@danielkesselberg.de>
- * @author Georg Ehrke <oc.list@georgehrke.com>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Julius Härtl <jus@bitgrid.net>
- * @author Mario Danic <mario@lovelyhq.com>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Robin Appelman <robin@icewind.nl>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2017 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 namespace OC\Core\Migrations;
 
-use OCP\DB\Types;
 use OCP\DB\ISchemaWrapper;
+use OCP\DB\Types;
 use OCP\IDBConnection;
 use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 class Version13000Date20170718121200 extends SimpleMigrationStep {
-
-	/** @var IDBConnection */
-	private $connection;
-
-	public function __construct(IDBConnection $connection) {
-		$this->connection = $connection;
+	public function __construct(
+		private IDBConnection $connection,
+	) {
 	}
 
 	public function preSchemaChange(IOutput $output, \Closure $schemaClosure, array $options) {
@@ -149,13 +120,15 @@ class Version13000Date20170718121200 extends SimpleMigrationStep {
 			$table->addIndex(['storage_id'], 'mounts_storage_index');
 			$table->addIndex(['root_id'], 'mounts_root_index');
 			$table->addIndex(['mount_id'], 'mounts_mount_id_index');
-			$table->addUniqueIndex(['user_id', 'root_id'], 'mounts_user_root_index');
+			$table->addIndex(['user_id', 'root_id', 'mount_point'], 'mounts_user_root_path_index', [], ['lengths' => [null, null, 128]]);
 		} else {
 			$table = $schema->getTable('mounts');
-			$table->addColumn('mount_id', Types::BIGINT, [
-				'notnull' => false,
-				'length' => 20,
-			]);
+			if (!$table->hasColumn('mount_id')) {
+				$table->addColumn('mount_id', Types::BIGINT, [
+					'notnull' => false,
+					'length' => 20,
+				]);
+			}
 			if (!$table->hasIndex('mounts_mount_id_index')) {
 				$table->addIndex(['mount_id'], 'mounts_mount_id_index');
 			}
@@ -261,8 +234,14 @@ class Version13000Date20170718121200 extends SimpleMigrationStep {
 			$table->addIndex(['storage', 'mimetype'], 'fs_storage_mimetype');
 			$table->addIndex(['storage', 'mimepart'], 'fs_storage_mimepart');
 			$table->addIndex(['storage', 'size', 'fileid'], 'fs_storage_size');
+			$table->addIndex(['fileid', 'storage', 'size'], 'fs_id_storage_size');
+			$table->addIndex(['parent'], 'fs_parent');
+			$table->addIndex(['name'], 'fs_name_hash');
 			$table->addIndex(['mtime'], 'fs_mtime');
 			$table->addIndex(['size'], 'fs_size');
+			if ($this->connection->getDatabaseProvider() !== IDBConnection::PLATFORM_POSTGRES) {
+				$table->addIndex(['storage', 'path'], 'fs_storage_path_prefix', [], ['lengths' => [null, 64]]);
+			}
 		}
 
 		if (!$schema->hasTable('group_user')) {
@@ -328,6 +307,7 @@ class Version13000Date20170718121200 extends SimpleMigrationStep {
 				'notnull' => false,
 			]);
 			$table->setPrimaryKey(['userid', 'appid', 'configkey']);
+			$table->addIndex(['appid', 'configkey'], 'preferences_app_key');
 		}
 
 		if (!$schema->hasTable('properties')) {
@@ -356,8 +336,10 @@ class Version13000Date20170718121200 extends SimpleMigrationStep {
 				'notnull' => true,
 			]);
 			$table->setPrimaryKey(['id']);
-			$table->addIndex(['userid'], 'property_index');
+			// Dropped in Version29000Date20240131122720 because property_index is redundant with properties_path_index
+			// $table->addIndex(['userid'], 'property_index');
 			$table->addIndex(['userid', 'propertypath'], 'properties_path_index');
+			$table->addIndex(['propertypath'], 'properties_pathonly_index');
 		} else {
 			$table = $schema->getTable('properties');
 			if ($table->hasColumn('propertytype')) {
@@ -520,6 +502,7 @@ class Version13000Date20170718121200 extends SimpleMigrationStep {
 			]);
 			$table->setPrimaryKey(['id']);
 			$table->addIndex(['class'], 'job_class_index');
+			$table->addIndex(['last_checked', 'reserved_at'], 'job_lastcheck_reserved');
 		}
 
 		if (!$schema->hasTable('users')) {
@@ -745,7 +728,12 @@ class Version13000Date20170718121200 extends SimpleMigrationStep {
 				'unsigned' => true,
 			]);
 			$table->setPrimaryKey(['objecttype', 'objectid', 'systemtagid'], 'som_pk');
-//			$table->addUniqueIndex(['objecttype', 'objectid', 'systemtagid'], 'mapping');
+			//			$table->addUniqueIndex(['objecttype', 'objectid', 'systemtagid'], 'mapping');
+			$table->addIndex(['systemtagid', 'objecttype'], 'systag_by_tagid');
+			// systag_by_objectid was added later and might be missing in older deployments
+			$table->addIndex(['objectid'], 'systag_by_objectid');
+			// systag_objecttype was added later and might be missing in older deployments
+			$table->addIndex(['objecttype'], 'systag_objecttype');
 		}
 
 		if (!$schema->hasTable('systemtag_group')) {
@@ -881,25 +869,25 @@ class Version13000Date20170718121200 extends SimpleMigrationStep {
 			]);
 			$table->addIndex(['object_type', 'object_id'], 'comments_marker_object_index');
 			$table->setPrimaryKey(['user_id', 'object_type', 'object_id'], 'crm_pk');
-//			$table->addUniqueIndex(['user_id', 'object_type', 'object_id'], 'comments_marker_index');
+			//			$table->addUniqueIndex(['user_id', 'object_type', 'object_id'], 'comments_marker_index');
 		}
 
-//		if (!$schema->hasTable('credentials')) {
-//			$table = $schema->createTable('credentials');
-//			$table->addColumn('user', 'string', [
-//				'notnull' => false,
-//				'length' => 64,
-//			]);
-//			$table->addColumn('identifier', 'string', [
-//				'notnull' => true,
-//				'length' => 64,
-//			]);
-//			$table->addColumn('credentials', 'text', [
-//				'notnull' => false,
-//			]);
-//			$table->setPrimaryKey(['user', 'identifier']);
-//			$table->addIndex(['user'], 'credentials_user');
-//		}
+		//		if (!$schema->hasTable('credentials')) {
+		//			$table = $schema->createTable('credentials');
+		//			$table->addColumn('user', 'string', [
+		//				'notnull' => false,
+		//				'length' => 64,
+		//			]);
+		//			$table->addColumn('identifier', 'string', [
+		//				'notnull' => true,
+		//				'length' => 64,
+		//			]);
+		//			$table->addColumn('credentials', 'text', [
+		//				'notnull' => false,
+		//			]);
+		//			$table->setPrimaryKey(['user', 'identifier']);
+		//			$table->addIndex(['user'], 'credentials_user');
+		//		}
 
 		if (!$schema->hasTable('admin_sections')) {
 			$table = $schema->createTable('admin_sections');
@@ -1029,9 +1017,9 @@ class Version13000Date20170718121200 extends SimpleMigrationStep {
 		$result = $query->execute();
 		while ($row = $result->fetch()) {
 			preg_match('/(calendar)\/([A-z0-9-@_]+)\//', $row['propertypath'], $match);
-			$insert->setParameter('propertypath', (string) $row['propertypath'])
-				->setParameter('propertyname', (string) $row['propertyname'])
-				->setParameter('propertyvalue', (string) $row['propertyvalue'])
+			$insert->setParameter('propertypath', (string)$row['propertypath'])
+				->setParameter('propertyname', (string)$row['propertyname'])
+				->setParameter('propertyvalue', (string)$row['propertyvalue'])
 				->setParameter('userid', ($match[2] ?? ''));
 			$insert->execute();
 		}

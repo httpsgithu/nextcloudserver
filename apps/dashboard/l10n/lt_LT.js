@@ -3,10 +3,10 @@ OC.L10N.register(
     {
     "Dashboard" : "Skydelis",
     "Dashboard app" : "Skydelio programėlė",
-    "Show something" : "Ką nors rodyti",
+    "\"{title} icon\"" : "„{title} piktograma“",
     "Customize" : "Tinkinti",
     "Edit widgets" : "Taisyti valdiklius",
-    "Change background image" : "Keisti foninį paveikslą",
+    "Get more widgets from the App Store" : "Parsisiųsti įskiepių iš App Store",
     "Weather service" : "Orų tarnyba",
     "For your privacy, the weather data is requested by your Nextcloud server on your behalf so the weather service receives no personal information." : "Dėl jūsų privatumo, orų duomenys yra jūsų vardu užklausiami jūsų Nextcloud serverio, todėl orų tarnyba negauna jokios asmeninės informacijos.",
     "Weather data from Met.no" : "Orų duomenys iš Met.no",
@@ -22,13 +22,7 @@ OC.L10N.register(
     "Good evening, {name}" : "Labas vakaras, {name}",
     "Hello" : "Sveiki",
     "Hello, {name}" : "Sveiki, {name},",
-    "Pick from Files" : "Pasirinkti iš Failų",
-    "Default images" : "Numatytieji paveikslai",
-    "Plain background" : "Vientisas fonas",
-    "Insert from {productName}" : "Įterpti iš {productName}",
-    "Get more widgets from the app store" : "Gauti daugiau valdiklių iš programėlių parduotuvės",
-    "Good night, {name}" : "Labas vakaras, {name}",
-    "Good night" : "Labas vakaras",
-    "Pick from files" : "Pasirinkti iš failų"
+    "Happy birthday 🥳🤩🎂🎉" : "Su gimtadieniu 🥳🤩🎂🎉",
+    "Happy birthday, {name} 🥳🤩🎂🎉" : "Su gimtadieniu, {name} 🥳🤩🎂🎉"
 },
 "nplurals=4; plural=(n % 10 == 1 && (n % 100 > 19 || n % 100 < 11) ? 0 : (n % 10 >= 2 && n % 10 <=9) && (n % 100 > 19 || n % 100 < 11) ? 1 : n % 1 != 0 ? 2: 3);");

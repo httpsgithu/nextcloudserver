@@ -1,38 +1,16 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Bernhard Posselt <dev@bernhard-posselt.com>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Clement Wong <git@clement.hk>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Jörn Friedrich Dreyer <jfd@butonic.de>
- * @author Lukas Reschke <lukas@statuscode.ch>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
- * @author Thomas Tanghus <thomas@tanghus.net>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 namespace OCP\AppFramework\Http;
 
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IConfig;
+use OCP\IRequest;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -40,16 +18,15 @@ use Psr\Log\LoggerInterface;
  *
  * It handles headers, HTTP status code, last modified and ETag.
  * @since 6.0.0
+ * @template S of Http::STATUS_*
+ * @template H of array<string, mixed>
  */
 class Response {
-
 	/**
-	 * Headers - defaults to ['Cache-Control' => 'no-cache, no-store, must-revalidate']
-	 * @var array
+	 * Headers
+	 * @var H
 	 */
-	private $headers = [
-		'Cache-Control' => 'no-cache, no-store, must-revalidate'
-	];
+	private $headers;
 
 
 	/**
@@ -61,9 +38,9 @@ class Response {
 
 	/**
 	 * HTTP status code - defaults to STATUS OK
-	 * @var int
+	 * @var S
 	 */
-	private $status = Http::STATUS_OK;
+	private $status;
 
 
 	/**
@@ -91,34 +68,39 @@ class Response {
 	private $throttleMetadata = [];
 
 	/**
+	 * @param S $status
+	 * @param H $headers
 	 * @since 17.0.0
 	 */
-	public function __construct() {
+	public function __construct(int $status = Http::STATUS_OK, array $headers = []) {
+		$this->setStatus($status);
+		$this->setHeaders($headers);
 	}
 
 	/**
 	 * Caches the response
-	 * @param int $cacheSeconds the amount of seconds that should be cached
-	 * if 0 then caching will be disabled
+	 *
+	 * @param int $cacheSeconds amount of seconds the response is fresh, 0 to disable cache.
+	 * @param bool $public whether the page should be cached by public proxy. Usually should be false, unless this is a static resources.
+	 * @param bool $immutable whether browser should treat the resource as immutable and not ask the server for each page load if the resource changed.
 	 * @return $this
 	 * @since 6.0.0 - return value was added in 7.0.0
 	 */
-	public function cacheFor(int $cacheSeconds, bool $public = false) {
+	public function cacheFor(int $cacheSeconds, bool $public = false, bool $immutable = false) {
 		if ($cacheSeconds > 0) {
-			$pragma = $public ? 'public' : 'private';
-			$this->addHeader('Cache-Control', $pragma . ', max-age=' . $cacheSeconds . ', must-revalidate');
-			$this->addHeader('Pragma', $pragma);
+			$cacheStore = $public ? 'public' : 'private';
+			$this->addHeader('Cache-Control', sprintf('%s, max-age=%s, %s', $cacheStore, $cacheSeconds, ($immutable ? 'immutable' : 'must-revalidate')));
 
 			// Set expires header
 			$expires = new \DateTime();
 			/** @var ITimeFactory $time */
-			$time = \OC::$server->query(ITimeFactory::class);
+			$time = \OCP\Server::get(ITimeFactory::class);
 			$expires->setTimestamp($time->getTime());
-			$expires->add(new \DateInterval('PT'.$cacheSeconds.'S'));
+			$expires->add(new \DateInterval('PT' . $cacheSeconds . 'S'));
 			$this->addHeader('Expires', $expires->format(\DateTimeInterface::RFC2822));
 		} else {
 			$this->addHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-			unset($this->headers['Expires'], $this->headers['Pragma']);
+			unset($this->headers['Expires']);
 		}
 
 		return $this;
@@ -129,13 +111,13 @@ class Response {
 	 * @param string $name The name of the cookie
 	 * @param string $value The value of the cookie
 	 * @param \DateTime|null $expireDate Date on that the cookie should expire, if set
-	 * 									to null cookie will be considered as session
-	 * 									cookie.
+	 *                                   to null cookie will be considered as session
+	 *                                   cookie.
 	 * @param string $sameSite The samesite value of the cookie. Defaults to Lax. Other possibilities are Strict or None
 	 * @return $this
 	 * @since 8.0.0
 	 */
-	public function addCookie($name, $value, \DateTime $expireDate = null, $sameSite = 'Lax') {
+	public function addCookie($name, $value, ?\DateTime $expireDate = null, $sameSite = 'Lax') {
 		$this->cookies[$name] = ['value' => $value, 'expireDate' => $expireDate, 'sameSite' => $sameSite];
 		return $this;
 	}
@@ -205,7 +187,7 @@ class Response {
 			$config = \OC::$server->get(IConfig::class);
 
 			if ($config->getSystemValueBool('debug', false)) {
-				\OC::$server->get(LoggerInterface::class)->error('Setting custom header on a 204 or 304 is not supported (Header: {header})', [
+				\OC::$server->get(LoggerInterface::class)->error('Setting custom header on a 304 is not supported (Header: {header})', [
 					'header' => $name,
 				]);
 			}
@@ -223,11 +205,14 @@ class Response {
 
 	/**
 	 * Set the headers
-	 * @param array $headers value header pairs
-	 * @return $this
+	 * @template NewH as array<string, mixed>
+	 * @param NewH $headers value header pairs
+	 * @psalm-this-out static<S, NewH>
+	 * @return static
 	 * @since 8.0.0
 	 */
-	public function setHeaders(array $headers) {
+	public function setHeaders(array $headers): static {
+		/** @psalm-suppress InvalidPropertyAssignmentValue Expected due to @psalm-this-out */
 		$this->headers = $headers;
 
 		return $this;
@@ -236,20 +221,26 @@ class Response {
 
 	/**
 	 * Returns the set headers
-	 * @return array the headers
+	 * @return array{X-Request-Id: string, Cache-Control: string, Content-Security-Policy: string, Feature-Policy: string, X-Robots-Tag: string, Last-Modified?: string, ETag?: string, ...H} the headers
 	 * @since 6.0.0
 	 */
 	public function getHeaders() {
-		$mergeWith = [];
+		/** @var IRequest $request */
+		/**
+		 * @psalm-suppress UndefinedClass
+		 */
+		$request = \OC::$server->get(IRequest::class);
+		$mergeWith = [
+			'X-Request-Id' => $request->getId(),
+			'Cache-Control' => 'no-cache, no-store, must-revalidate',
+			'Content-Security-Policy' => $this->getContentSecurityPolicy()->buildPolicy(),
+			'Feature-Policy' => $this->getFeaturePolicy()->buildPolicy(),
+			'X-Robots-Tag' => 'noindex, nofollow',
+		];
 
 		if ($this->lastModified) {
-			$mergeWith['Last-Modified'] =
-				$this->lastModified->format(\DateTimeInterface::RFC2822);
+			$mergeWith['Last-Modified'] = $this->lastModified->format(\DateTimeInterface::RFC2822);
 		}
-
-		$this->headers['Content-Security-Policy'] = $this->getContentSecurityPolicy()->buildPolicy();
-		$this->headers['Feature-Policy'] = $this->getFeaturePolicy()->buildPolicy();
-		$this->headers['X-Robots-Tag'] = 'none';
 
 		if ($this->ETag) {
 			$mergeWith['ETag'] = '"' . $this->ETag . '"';
@@ -271,11 +262,14 @@ class Response {
 
 	/**
 	 * Set response status
-	 * @param int $status a HTTP status code, see also the STATUS constants
-	 * @return Response Reference to this object
+	 * @template NewS as int
+	 * @param NewS $status a HTTP status code, see also the STATUS constants
+	 * @psalm-this-out static<NewS, H>
+	 * @return static
 	 * @since 6.0.0 - return value was added in 7.0.0
 	 */
-	public function setStatus($status) {
+	public function setStatus($status): static {
+		/** @psalm-suppress InvalidPropertyAssignmentValue Expected due to @psalm-this-out */
 		$this->status = $status;
 
 		return $this;
@@ -295,7 +289,7 @@ class Response {
 	/**
 	 * Get the currently used Content-Security-Policy
 	 * @return EmptyContentSecurityPolicy|null Used Content-Security-Policy or null if
-	 *                                    none specified.
+	 *                                         none specified.
 	 * @since 8.1.0
 	 */
 	public function getContentSecurityPolicy() {
@@ -330,6 +324,7 @@ class Response {
 	/**
 	 * Get response status
 	 * @since 6.0.0
+	 * @return S
 	 */
 	public function getStatus() {
 		return $this->status;

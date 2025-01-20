@@ -1,31 +1,10 @@
 /**
- * @copyright 2019 Christoph Wurst <christoph@winzerhof-wurst.at>
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Daniel Calviño Sánchez <danxuliu@gmail.com>
- * @author Joas Schilling <coding@schilljs.com>
- * @author John Molakvoæ <skjnldsv@protonmail.com>
- * @author Julius Härtl <jus@bitgrid.net>
- * @author npmbuildbot[bot] "npmbuildbot[bot]@users.noreply.github.com"
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 import _ from 'underscore'
+/** @typedef {import('jquery')} jQuery */
 import $ from 'jquery'
 import { showMessage, TOAST_DEFAULT_TIMEOUT, TOAST_PERMANENT_TIMEOUT } from '@nextcloud/dialogs'
 
@@ -95,10 +74,10 @@ export default {
 	 * Consider using show() instead of showHTML()
 	 *
 	 * @param {string} html Message to display
-	 * @param {Object} [options] options
+	 * @param {object} [options] options
 	 * @param {string} [options.type] notification type
-	 * @param {int} [options.timeout=0] timeout value, defaults to 0 (permanent)
-	 * @returns {jQuery} jQuery element for notification row
+	 * @param {number} [options.timeout] timeout value, defaults to 0 (permanent)
+	 * @return {jQuery} jQuery element for notification row
 	 * @deprecated 17.0.0 use the `@nextcloud/dialogs` package
 	 */
 	showHtml(html, options) {
@@ -114,10 +93,10 @@ export default {
 	 * Shows a sanitized notification
 	 *
 	 * @param {string} text Message to display
-	 * @param {Object} [options] options
+	 * @param {object} [options] options
 	 * @param {string} [options.type] notification type
-	 * @param {int} [options.timeout=0] timeout value, defaults to 0 (permanent)
-	 * @returns {jQuery} jQuery element for notification row
+	 * @param {number} [options.timeout] timeout value, defaults to 0 (permanent)
+	 * @return {jQuery} jQuery element for notification row
 	 * @deprecated 17.0.0 use the `@nextcloud/dialogs` package
 	 */
 	show(text, options) {
@@ -141,7 +120,7 @@ export default {
 	 * Updates (replaces) a sanitized notification.
 	 *
 	 * @param {string} text Message to display
-	 * @returns {jQuery} JQuery element for notificaiton row
+	 * @return {jQuery} JQuery element for notification row
 	 * @deprecated 17.0.0 use the `@nextcloud/dialogs` package
 	 */
 	showUpdate(text) {
@@ -158,11 +137,11 @@ export default {
 	 * 7 seconds
 	 *
 	 * @param {string} text Message to show
-	 * @param {array} [options] options array
-	 * @param {int} [options.timeout=7] timeout in seconds, if this is 0 it will show the message permanently
-	 * @param {boolean} [options.isHTML=false] an indicator for HTML notifications (true) or text (false)
+	 * @param {Array} [options] options array
+	 * @param {number} [options.timeout] timeout in seconds, if this is 0 it will show the message permanently
+	 * @param {boolean} [options.isHTML] an indicator for HTML notifications (true) or text (false)
 	 * @param {string} [options.type] notification type
-	 * @returns {JQuery<any>} the toast element
+	 * @return {jQuery} the toast element
 	 * @deprecated 17.0.0 use the `@nextcloud/dialogs` package
 	 */
 	showTemporary(text, options) {
@@ -175,7 +154,8 @@ export default {
 
 	/**
 	 * Returns whether a notification is hidden.
-	 * @returns {boolean}
+	 *
+	 * @return {boolean}
 	 * @deprecated 17.0.0 use the `@nextcloud/dialogs` package
 	 */
 	isHidden() {

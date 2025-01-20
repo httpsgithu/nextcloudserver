@@ -1,40 +1,9 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Bart Visscher <bartv@thisnet.nl>
- * @author Björn Schießle <bjoern@schiessle.org>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Daniel Calviño Sánchez <danxuliu@gmail.com>
- * @author Jakob Sack <mail@jakobsack.de>
- * @author Jan-Philipp Litza <jplitza@users.noreply.github.com>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Jörn Friedrich Dreyer <jfd@butonic.de>
- * @author Julius Härtl <jus@bitgrid.net>
- * @author Lukas Reschke <lukas@statuscode.ch>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Owen Winkler <a_github@midnightcircus.com>
- * @author Robin Appelman <robin@icewind.nl>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Semih Serhat Karakaya <karakayasemi@itu.edu.tr>
- * @author Stefan Schneider <stefan.schneider@squareweave.com.au>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
- * @author Vincent Petry <vincent@nextcloud.com>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 namespace OCA\DAV\Connector\Sabre;
 
@@ -43,10 +12,13 @@ use OC\AppFramework\Http\Request;
 use OC\Files\Filesystem;
 use OC\Files\Stream\HashWrapper;
 use OC\Files\View;
+use OCA\DAV\AppInfo\Application;
+use OCA\DAV\Connector\Sabre\Exception\BadGateway;
 use OCA\DAV\Connector\Sabre\Exception\EntityTooLarge;
 use OCA\DAV\Connector\Sabre\Exception\FileLocked;
 use OCA\DAV\Connector\Sabre\Exception\Forbidden as DAVForbiddenException;
 use OCA\DAV\Connector\Sabre\Exception\UnsupportedMediaType;
+use OCP\App\IAppManager;
 use OCP\Encryption\Exceptions\GenericEncryptionException;
 use OCP\Files\EntityTooLargeException;
 use OCP\Files\FileInfo;
@@ -57,38 +29,52 @@ use OCP\Files\InvalidPathException;
 use OCP\Files\LockNotAcquiredException;
 use OCP\Files\NotFoundException;
 use OCP\Files\NotPermittedException;
-use OCP\Files\Storage;
+use OCP\Files\Storage\IWriteStreamStorage;
 use OCP\Files\StorageNotAvailableException;
-use OCP\ILogger;
+use OCP\IL10N;
+use OCP\IRequest;
+use OCP\L10N\IFactory as IL10NFactory;
 use OCP\Lock\ILockingProvider;
 use OCP\Lock\LockedException;
+use OCP\Server;
 use OCP\Share\IManager;
+use Psr\Log\LoggerInterface;
 use Sabre\DAV\Exception;
 use Sabre\DAV\Exception\BadRequest;
 use Sabre\DAV\Exception\Forbidden;
 use Sabre\DAV\Exception\NotFound;
-use Sabre\DAV\Exception\NotImplemented;
 use Sabre\DAV\Exception\ServiceUnavailable;
 use Sabre\DAV\IFile;
 
 class File extends Node implements IFile {
-	protected $request;
+	protected IRequest $request;
+	protected IL10N $l10n;
 
 	/**
 	 * Sets up the node, expects a full path name
 	 *
-	 * @param \OC\Files\View $view
-	 * @param \OCP\Files\FileInfo $info
-	 * @param \OCP\Share\IManager $shareManager
-	 * @param \OC\AppFramework\Http\Request $request
+	 * @param View $view
+	 * @param FileInfo $info
+	 * @param ?\OCP\Share\IManager $shareManager
+	 * @param ?IRequest $request
+	 * @param ?IL10N $l10n
 	 */
-	public function __construct(View $view, FileInfo $info, IManager $shareManager = null, Request $request = null) {
+	public function __construct(View $view, FileInfo $info, ?IManager $shareManager = null, ?IRequest $request = null, ?IL10N $l10n = null) {
 		parent::__construct($view, $info, $shareManager);
+
+		if ($l10n) {
+			$this->l10n = $l10n;
+		} else {
+			// Querying IL10N directly results in a dependency loop
+			/** @var IL10NFactory $l10nFactory */
+			$l10nFactory = \OC::$server->get(IL10NFactory::class);
+			$this->l10n = $l10nFactory->get(Application::APP_ID);
+		}
 
 		if (isset($request)) {
 			$this->request = $request;
 		} else {
-			$this->request = \OC::$server->getRequest();
+			$this->request = \OC::$server->get(IRequest::class);
 		}
 	}
 
@@ -109,7 +95,7 @@ class File extends Node implements IFile {
 	 * different object on a subsequent GET you are strongly recommended to not
 	 * return an ETag, and just return null.
 	 *
-	 * @param resource $data
+	 * @param resource|string $data
 	 *
 	 * @throws Forbidden
 	 * @throws UnsupportedMediaType
@@ -123,30 +109,23 @@ class File extends Node implements IFile {
 	public function put($data) {
 		try {
 			$exists = $this->fileView->file_exists($this->path);
-			if ($this->info && $exists && !$this->info->isUpdateable()) {
+			if ($exists && !$this->info->isUpdateable()) {
 				throw new Forbidden();
 			}
 		} catch (StorageNotAvailableException $e) {
-			throw new ServiceUnavailable("File is not updatable: " . $e->getMessage());
+			throw new ServiceUnavailable($this->l10n->t('File is not updatable: %1$s', [$e->getMessage()]));
 		}
 
 		// verify path of the target
 		$this->verifyPath();
 
-		// chunked handling
-		if (isset($_SERVER['HTTP_OC_CHUNKED'])) {
-			try {
-				return $this->createFileChunked($data);
-			} catch (\Exception $e) {
-				$this->convertToSabreException($e);
-			}
-		}
-
-		/** @var Storage $partStorage */
 		[$partStorage] = $this->fileView->resolvePath($this->path);
+		if ($partStorage === null) {
+			throw new ServiceUnavailable($this->l10n->t('Failed to get storage for file'));
+		}
 		$needsPartFile = $partStorage->needsPartFile() && (strlen($this->path) > 1);
 
-		$view = \OC\Files\Filesystem::getView();
+		$view = Filesystem::getView();
 
 		if ($needsPartFile) {
 			// mark file as partial while uploading (ignored by the scanner)
@@ -161,18 +140,35 @@ class File extends Node implements IFile {
 			$partFilePath = $this->path;
 
 			if ($view && !$this->emitPreHooks($exists)) {
-				throw new Exception('Could not write to final file, canceled by hook');
+				throw new Exception($this->l10n->t('Could not write to final file, canceled by hook'));
 			}
 		}
 
 		// the part file and target file might be on a different storage in case of a single file storage (e.g. single file share)
-		/** @var \OC\Files\Storage\Storage $partStorage */
 		[$partStorage, $internalPartPath] = $this->fileView->resolvePath($partFilePath);
-		/** @var \OC\Files\Storage\Storage $storage */
 		[$storage, $internalPath] = $this->fileView->resolvePath($this->path);
+		if ($partStorage === null || $storage === null) {
+			throw new ServiceUnavailable($this->l10n->t('Failed to get storage for file'));
+		}
 		try {
 			if (!$needsPartFile) {
-				$this->changeLock(ILockingProvider::LOCK_EXCLUSIVE);
+				try {
+					$this->changeLock(ILockingProvider::LOCK_EXCLUSIVE);
+				} catch (LockedException $e) {
+					// during very large uploads, the shared lock we got at the start might have been expired
+					// meaning that the above lock can fail not just only because somebody else got a shared lock
+					// or because there is no existing shared lock to make exclusive
+					//
+					// Thus we try to get a new exclusive lock, if the original lock failed because of a different shared
+					// lock this will still fail, if our original shared lock expired the new lock will be successful and
+					// the entire operation will be safe
+
+					try {
+						$this->acquireLock(ILockingProvider::LOCK_EXCLUSIVE);
+					} catch (LockedException $ex) {
+						throw new FileLocked($e->getMessage(), $e->getCode(), $e);
+					}
+				}
 			}
 
 			if (!is_resource($data)) {
@@ -184,19 +180,30 @@ class File extends Node implements IFile {
 				$data = $tmpData;
 			}
 
-			$data = HashWrapper::wrap($data, 'md5', function ($hash) {
-				$this->header('X-Hash-MD5: ' . $hash);
-			});
-			$data = HashWrapper::wrap($data, 'sha1', function ($hash) {
-				$this->header('X-Hash-SHA1: ' . $hash);
-			});
-			$data = HashWrapper::wrap($data, 'sha256', function ($hash) {
-				$this->header('X-Hash-SHA256: ' . $hash);
-			});
+			if ($this->request->getHeader('X-HASH') !== '') {
+				$hash = $this->request->getHeader('X-HASH');
+				if ($hash === 'all' || $hash === 'md5') {
+					$data = HashWrapper::wrap($data, 'md5', function ($hash): void {
+						$this->header('X-Hash-MD5: ' . $hash);
+					});
+				}
 
-			if ($partStorage->instanceOfStorage(Storage\IWriteStreamStorage::class)) {
+				if ($hash === 'all' || $hash === 'sha1') {
+					$data = HashWrapper::wrap($data, 'sha1', function ($hash): void {
+						$this->header('X-Hash-SHA1: ' . $hash);
+					});
+				}
+
+				if ($hash === 'all' || $hash === 'sha256') {
+					$data = HashWrapper::wrap($data, 'sha256', function ($hash): void {
+						$this->header('X-Hash-SHA256: ' . $hash);
+					});
+				}
+			}
+
+			if ($partStorage->instanceOfStorage(IWriteStreamStorage::class)) {
 				$isEOF = false;
-				$wrappedData = CallbackWrapper::wrap($data, null, null, null, null, function ($stream) use (&$isEOF) {
+				$wrappedData = CallbackWrapper::wrap($data, null, null, null, null, function ($stream) use (&$isEOF): void {
 					$isEOF = feof($stream);
 				});
 
@@ -206,6 +213,8 @@ class File extends Node implements IFile {
 					$count = $partStorage->writeStream($internalPartPath, $wrappedData);
 				} catch (GenericFileException $e) {
 					$result = false;
+				} catch (BadGateway $e) {
+					throw $e;
 				}
 
 
@@ -218,9 +227,9 @@ class File extends Node implements IFile {
 			} else {
 				$target = $partStorage->fopen($internalPartPath, 'wb');
 				if ($target === false) {
-					\OC::$server->getLogger()->error('\OC\Files\Filesystem::fopen() failed', ['app' => 'webdav']);
+					\OC::$server->get(LoggerInterface::class)->error('\OC\Files\Filesystem::fopen() failed', ['app' => 'webdav']);
 					// because we have no clue about the cause we can only throw back a 500/Internal Server Error
-					throw new Exception('Could not write file contents');
+					throw new Exception($this->l10n->t('Could not write file contents'));
 				}
 				[$count, $result] = \OC_Helper::streamCopy($data, $target);
 				fclose($target);
@@ -228,31 +237,48 @@ class File extends Node implements IFile {
 
 			if ($result === false) {
 				$expected = -1;
-				if (isset($_SERVER['CONTENT_LENGTH'])) {
-					$expected = $_SERVER['CONTENT_LENGTH'];
+				$lengthHeader = $this->request->getHeader('content-length');
+				if ($lengthHeader) {
+					$expected = (int)$lengthHeader;
 				}
-				if ($expected !== "0") {
-					throw new Exception('Error while copying file to target location (copied bytes: ' . $count . ', expected filesize: ' . $expected . ' )');
+				if ($expected !== 0) {
+					throw new Exception(
+						$this->l10n->t(
+							'Error while copying file to target location (copied: %1$s, expected filesize: %2$s)',
+							[
+								$this->l10n->n('%n byte', '%n bytes', $count),
+								$this->l10n->n('%n byte', '%n bytes', $expected),
+							],
+						)
+					);
 				}
 			}
 
 			// if content length is sent by client:
 			// double check if the file was fully received
 			// compare expected and actual size
-			if (isset($_SERVER['CONTENT_LENGTH']) && $_SERVER['REQUEST_METHOD'] === 'PUT') {
-				$expected = (int)$_SERVER['CONTENT_LENGTH'];
+			$lengthHeader = $this->request->getHeader('content-length');
+			if ($lengthHeader && $this->request->getMethod() === 'PUT') {
+				$expected = (int)$lengthHeader;
 				if ($count !== $expected) {
-					throw new BadRequest('Expected filesize of ' . $expected . ' bytes but read (from Nextcloud client) and wrote (to Nextcloud storage) ' . $count . ' bytes. Could either be a network problem on the sending side or a problem writing to the storage on the server side.');
+					throw new BadRequest(
+						$this->l10n->t(
+							'Expected filesize of %1$s but read (from Nextcloud client) and wrote (to Nextcloud storage) %2$s. Could either be a network problem on the sending side or a problem writing to the storage on the server side.',
+							[
+								$this->l10n->n('%n byte', '%n bytes', $expected),
+								$this->l10n->n('%n byte', '%n bytes', $count),
+							],
+						)
+					);
 				}
 			}
 		} catch (\Exception $e) {
-			$context = [];
-
 			if ($e instanceof LockedException) {
-				$context['level'] = ILogger::DEBUG;
+				\OC::$server->get(LoggerInterface::class)->debug($e->getMessage(), ['exception' => $e]);
+			} else {
+				\OC::$server->get(LoggerInterface::class)->error($e->getMessage(), ['exception' => $e]);
 			}
 
-			\OC::$server->getLogger()->logException($e, $context);
 			if ($needsPartFile) {
 				$partStorage->unlink($internalPartPath);
 			}
@@ -263,7 +289,7 @@ class File extends Node implements IFile {
 			if ($needsPartFile) {
 				if ($view && !$this->emitPreHooks($exists)) {
 					$partStorage->unlink($internalPartPath);
-					throw new Exception('Could not rename part file to final file, canceled by hook');
+					throw new Exception($this->l10n->t('Could not rename part file to final file, canceled by hook'));
 				}
 				try {
 					$this->changeLock(ILockingProvider::LOCK_EXCLUSIVE);
@@ -291,8 +317,8 @@ class File extends Node implements IFile {
 					$renameOkay = $storage->moveFromStorage($partStorage, $internalPartPath, $internalPath);
 					$fileExists = $storage->file_exists($internalPath);
 					if ($renameOkay === false || $fileExists === false) {
-						\OC::$server->getLogger()->error('renaming part file to final file failed $renameOkay: ' . ($renameOkay ? 'true' : 'false') . ', $fileExists: ' . ($fileExists ? 'true' : 'false') . ')', ['app' => 'webdav']);
-						throw new Exception('Could not rename part file to final file');
+						\OC::$server->get(LoggerInterface::class)->error('renaming part file to final file failed $renameOkay: ' . ($renameOkay ? 'true' : 'false') . ', $fileExists: ' . ($fileExists ? 'true' : 'false') . ')', ['app' => 'webdav']);
+						throw new Exception($this->l10n->t('Could not rename part file to final file'));
 					}
 				} catch (ForbiddenException $ex) {
 					if (!$ex->getRetry()) {
@@ -315,8 +341,9 @@ class File extends Node implements IFile {
 			}
 
 			// allow sync clients to send the mtime along in a header
-			if (isset($this->request->server['HTTP_X_OC_MTIME'])) {
-				$mtime = $this->sanitizeMtime($this->request->server['HTTP_X_OC_MTIME']);
+			$mtimeHeader = $this->request->getHeader('x-oc-mtime');
+			if ($mtimeHeader !== '') {
+				$mtime = $this->sanitizeMtime($mtimeHeader);
 				if ($this->fileView->touch($this->path, $mtime)) {
 					$this->header('X-OC-MTime: accepted');
 				}
@@ -327,8 +354,9 @@ class File extends Node implements IFile {
 			];
 
 			// allow sync clients to send the creation time along in a header
-			if (isset($this->request->server['HTTP_X_OC_CTIME'])) {
-				$ctime = $this->sanitizeMtime($this->request->server['HTTP_X_OC_CTIME']);
+			$ctimeHeader = $this->request->getHeader('x-oc-ctime');
+			if ($ctimeHeader) {
+				$ctime = $this->sanitizeMtime($ctimeHeader);
 				$fileInfoUpdate['creation_time'] = $ctime;
 				$this->header('X-OC-CTime: accepted');
 			}
@@ -341,16 +369,15 @@ class File extends Node implements IFile {
 
 			$this->refreshInfo();
 
-			if (isset($this->request->server['HTTP_OC_CHECKSUM'])) {
-				$checksum = trim($this->request->server['HTTP_OC_CHECKSUM']);
-				$this->fileView->putFileInfo($this->path, ['checksum' => $checksum]);
-				$this->refreshInfo();
+			$checksumHeader = $this->request->getHeader('oc-checksum');
+			if ($checksumHeader) {
+				$checksum = trim($checksumHeader);
+				$this->setChecksum($checksum);
 			} elseif ($this->getChecksum() !== null && $this->getChecksum() !== '') {
-				$this->fileView->putFileInfo($this->path, ['checksum' => '']);
-				$this->refreshInfo();
+				$this->setChecksum('');
 			}
 		} catch (StorageNotAvailableException $e) {
-			throw new ServiceUnavailable("Failed to check file size: " . $e->getMessage(), 0, $e);
+			throw new ServiceUnavailable($this->l10n->t('Failed to check file size: %1$s', [$e->getMessage()]), 0, $e);
 		}
 
 		return '"' . $this->info->getEtag() . '"';
@@ -365,53 +392,55 @@ class File extends Node implements IFile {
 		}
 	}
 
-	/**
-	 * @param string $path
-	 */
-	private function emitPreHooks($exists, $path = null) {
+	private function emitPreHooks(bool $exists, ?string $path = null): bool {
 		if (is_null($path)) {
 			$path = $this->path;
 		}
 		$hookPath = Filesystem::getView()->getRelativePath($this->fileView->getAbsolutePath($path));
+		if ($hookPath === null) {
+			// We only trigger hooks from inside default view
+			return true;
+		}
 		$run = true;
 
 		if (!$exists) {
-			\OC_Hook::emit(\OC\Files\Filesystem::CLASSNAME, \OC\Files\Filesystem::signal_create, [
-				\OC\Files\Filesystem::signal_param_path => $hookPath,
-				\OC\Files\Filesystem::signal_param_run => &$run,
+			\OC_Hook::emit(Filesystem::CLASSNAME, Filesystem::signal_create, [
+				Filesystem::signal_param_path => $hookPath,
+				Filesystem::signal_param_run => &$run,
 			]);
 		} else {
-			\OC_Hook::emit(\OC\Files\Filesystem::CLASSNAME, \OC\Files\Filesystem::signal_update, [
-				\OC\Files\Filesystem::signal_param_path => $hookPath,
-				\OC\Files\Filesystem::signal_param_run => &$run,
+			\OC_Hook::emit(Filesystem::CLASSNAME, Filesystem::signal_update, [
+				Filesystem::signal_param_path => $hookPath,
+				Filesystem::signal_param_run => &$run,
 			]);
 		}
-		\OC_Hook::emit(\OC\Files\Filesystem::CLASSNAME, \OC\Files\Filesystem::signal_write, [
-			\OC\Files\Filesystem::signal_param_path => $hookPath,
-			\OC\Files\Filesystem::signal_param_run => &$run,
+		\OC_Hook::emit(Filesystem::CLASSNAME, Filesystem::signal_write, [
+			Filesystem::signal_param_path => $hookPath,
+			Filesystem::signal_param_run => &$run,
 		]);
 		return $run;
 	}
 
-	/**
-	 * @param string $path
-	 */
-	private function emitPostHooks($exists, $path = null) {
+	private function emitPostHooks(bool $exists, ?string $path = null): void {
 		if (is_null($path)) {
 			$path = $this->path;
 		}
 		$hookPath = Filesystem::getView()->getRelativePath($this->fileView->getAbsolutePath($path));
+		if ($hookPath === null) {
+			// We only trigger hooks from inside default view
+			return;
+		}
 		if (!$exists) {
-			\OC_Hook::emit(\OC\Files\Filesystem::CLASSNAME, \OC\Files\Filesystem::signal_post_create, [
-				\OC\Files\Filesystem::signal_param_path => $hookPath
+			\OC_Hook::emit(Filesystem::CLASSNAME, Filesystem::signal_post_create, [
+				Filesystem::signal_param_path => $hookPath
 			]);
 		} else {
-			\OC_Hook::emit(\OC\Files\Filesystem::CLASSNAME, \OC\Files\Filesystem::signal_post_update, [
-				\OC\Files\Filesystem::signal_param_path => $hookPath
+			\OC_Hook::emit(Filesystem::CLASSNAME, Filesystem::signal_post_update, [
+				Filesystem::signal_param_path => $hookPath
 			]);
 		}
-		\OC_Hook::emit(\OC\Files\Filesystem::CLASSNAME, \OC\Files\Filesystem::signal_post_write, [
-			\OC\Files\Filesystem::signal_param_path => $hookPath
+		\OC_Hook::emit(Filesystem::CLASSNAME, Filesystem::signal_post_write, [
+			Filesystem::signal_param_path => $hookPath
 		]);
 	}
 
@@ -429,20 +458,37 @@ class File extends Node implements IFile {
 				// do a if the file did not exist
 				throw new NotFound();
 			}
+			$path = ltrim($this->path, '/');
 			try {
-				$res = $this->fileView->fopen(ltrim($this->path, '/'), 'rb');
+				$res = $this->fileView->fopen($path, 'rb');
 			} catch (\Exception $e) {
 				$this->convertToSabreException($e);
 			}
+
 			if ($res === false) {
-				throw new ServiceUnavailable("Could not open file");
+				if ($this->fileView->file_exists($path)) {
+					throw new ServiceUnavailable($this->l10n->t('Could not open file: %1$s, file does seem to exist', [$path]));
+				} else {
+					throw new ServiceUnavailable($this->l10n->t('Could not open file: %1$s, file doesn\'t seem to exist', [$path]));
+				}
 			}
+
+			// comparing current file size with the one in DB
+			// if different, fix DB and refresh cache.
+			if ($this->getSize() !== $this->fileView->filesize($this->getPath())) {
+				$logger = \OC::$server->get(LoggerInterface::class);
+				$logger->warning('fixing cached size of file id=' . $this->getId());
+
+				$this->getFileInfo()->getStorage()->getUpdater()->update($this->getFileInfo()->getInternalPath());
+				$this->refreshInfo();
+			}
+
 			return $res;
 		} catch (GenericEncryptionException $e) {
 			// returning 503 will allow retry of the operation at a later point in time
-			throw new ServiceUnavailable("Encryption not ready: " . $e->getMessage());
+			throw new ServiceUnavailable($this->l10n->t('Encryption not ready: %1$s', [$e->getMessage()]));
 		} catch (StorageNotAvailableException $e) {
-			throw new ServiceUnavailable("Failed to open file: " . $e->getMessage());
+			throw new ServiceUnavailable($this->l10n->t('Failed to open file: %1$s', [$e->getMessage()]));
 		} catch (ForbiddenException $ex) {
 			throw new DAVForbiddenException($ex->getMessage(), $ex->getRetry());
 		} catch (LockedException $e) {
@@ -467,7 +513,7 @@ class File extends Node implements IFile {
 				throw new Forbidden();
 			}
 		} catch (StorageNotAvailableException $e) {
-			throw new ServiceUnavailable("Failed to unlink: " . $e->getMessage());
+			throw new ServiceUnavailable($this->l10n->t('Failed to unlink: %1$s', [$e->getMessage()]));
 		} catch (ForbiddenException $ex) {
 			throw new DAVForbiddenException($ex->getMessage(), $ex->getRetry());
 		} catch (LockedException $e) {
@@ -486,7 +532,7 @@ class File extends Node implements IFile {
 		$mimeType = $this->info->getMimetype();
 
 		// PROPFIND needs to return the correct mime type, for consistency with the web UI
-		if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'PROPFIND') {
+		if ($this->request->getMethod() === 'PROPFIND') {
 			return $mimeType;
 		}
 		return \OC::$server->getMimeTypeDetector()->getSecureMimeType($mimeType);
@@ -496,134 +542,15 @@ class File extends Node implements IFile {
 	 * @return array|bool
 	 */
 	public function getDirectDownload() {
-		if (\OCP\App::isEnabled('encryption')) {
+		if (Server::get(IAppManager::class)->isEnabledForUser('encryption')) {
 			return [];
 		}
-		/** @var \OCP\Files\Storage $storage */
 		[$storage, $internalPath] = $this->fileView->resolvePath($this->path);
 		if (is_null($storage)) {
 			return [];
 		}
 
 		return $storage->getDirectDownload($internalPath);
-	}
-
-	/**
-	 * @param resource $data
-	 * @return null|string
-	 * @throws Exception
-	 * @throws BadRequest
-	 * @throws NotImplemented
-	 * @throws ServiceUnavailable
-	 */
-	private function createFileChunked($data) {
-		[$path, $name] = \Sabre\Uri\split($this->path);
-
-		$info = \OC_FileChunking::decodeName($name);
-		if (empty($info)) {
-			throw new NotImplemented('Invalid chunk name');
-		}
-
-		$chunk_handler = new \OC_FileChunking($info);
-		$bytesWritten = $chunk_handler->store($info['index'], $data);
-
-		//detect aborted upload
-		if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'PUT') {
-			if (isset($_SERVER['CONTENT_LENGTH'])) {
-				$expected = (int)$_SERVER['CONTENT_LENGTH'];
-				if ($bytesWritten !== $expected) {
-					$chunk_handler->remove($info['index']);
-					throw new BadRequest('Expected filesize of ' . $expected . ' bytes but read (from Nextcloud client) and wrote (to Nextcloud storage) ' . $bytesWritten . ' bytes. Could either be a network problem on the sending side or a problem writing to the storage on the server side.');
-				}
-			}
-		}
-
-		if ($chunk_handler->isComplete()) {
-			/** @var Storage $storage */
-			[$storage,] = $this->fileView->resolvePath($path);
-			$needsPartFile = $storage->needsPartFile();
-			$partFile = null;
-
-			$targetPath = $path . '/' . $info['name'];
-			/** @var \OC\Files\Storage\Storage $targetStorage */
-			[$targetStorage, $targetInternalPath] = $this->fileView->resolvePath($targetPath);
-
-			$exists = $this->fileView->file_exists($targetPath);
-
-			try {
-				$this->fileView->lockFile($targetPath, ILockingProvider::LOCK_SHARED);
-
-				$this->emitPreHooks($exists, $targetPath);
-				$this->fileView->changeLock($targetPath, ILockingProvider::LOCK_EXCLUSIVE);
-				/** @var \OC\Files\Storage\Storage $targetStorage */
-				[$targetStorage, $targetInternalPath] = $this->fileView->resolvePath($targetPath);
-
-				if ($needsPartFile) {
-					// we first assembly the target file as a part file
-					$partFile = $this->getPartFileBasePath($path . '/' . $info['name']) . '.ocTransferId' . $info['transferid'] . '.part';
-					/** @var \OC\Files\Storage\Storage $targetStorage */
-					[$partStorage, $partInternalPath] = $this->fileView->resolvePath($partFile);
-
-
-					$chunk_handler->file_assemble($partStorage, $partInternalPath);
-
-					// here is the final atomic rename
-					$renameOkay = $targetStorage->moveFromStorage($partStorage, $partInternalPath, $targetInternalPath);
-					$fileExists = $targetStorage->file_exists($targetInternalPath);
-					if ($renameOkay === false || $fileExists === false) {
-						\OC::$server->getLogger()->error('\OC\Files\Filesystem::rename() failed', ['app' => 'webdav']);
-						// only delete if an error occurred and the target file was already created
-						if ($fileExists) {
-							// set to null to avoid double-deletion when handling exception
-							// stray part file
-							$partFile = null;
-							$targetStorage->unlink($targetInternalPath);
-						}
-						$this->fileView->changeLock($targetPath, ILockingProvider::LOCK_SHARED);
-						throw new Exception('Could not rename part file assembled from chunks');
-					}
-				} else {
-					// assemble directly into the final file
-					$chunk_handler->file_assemble($targetStorage, $targetInternalPath);
-				}
-
-				// allow sync clients to send the mtime along in a header
-				if (isset($this->request->server['HTTP_X_OC_MTIME'])) {
-					$mtime = $this->sanitizeMtime($this->request->server['HTTP_X_OC_MTIME']);
-					if ($targetStorage->touch($targetInternalPath, $mtime)) {
-						$this->header('X-OC-MTime: accepted');
-					}
-				}
-
-				// since we skipped the view we need to scan and emit the hooks ourselves
-				$targetStorage->getUpdater()->update($targetInternalPath);
-
-				$this->fileView->changeLock($targetPath, ILockingProvider::LOCK_SHARED);
-
-				$this->emitPostHooks($exists, $targetPath);
-
-				// FIXME: should call refreshInfo but can't because $this->path is not the of the final file
-				$info = $this->fileView->getFileInfo($targetPath);
-
-				if (isset($this->request->server['HTTP_OC_CHECKSUM'])) {
-					$checksum = trim($this->request->server['HTTP_OC_CHECKSUM']);
-					$this->fileView->putFileInfo($targetPath, ['checksum' => $checksum]);
-				} elseif ($info->getChecksum() !== null && $info->getChecksum() !== '') {
-					$this->fileView->putFileInfo($this->path, ['checksum' => '']);
-				}
-
-				$this->fileView->unlockFile($targetPath, ILockingProvider::LOCK_SHARED);
-
-				return $info->getEtag();
-			} catch (\Exception $e) {
-				if ($partFile !== null) {
-					$targetStorage->unlink($targetInternalPath);
-				}
-				$this->convertToSabreException($e);
-			}
-		}
-
-		return null;
 	}
 
 	/**
@@ -664,13 +591,13 @@ class File extends Node implements IFile {
 		}
 		if ($e instanceof GenericEncryptionException) {
 			// returning 503 will allow retry of the operation at a later point in time
-			throw new ServiceUnavailable('Encryption not ready: ' . $e->getMessage(), 0, $e);
+			throw new ServiceUnavailable($this->l10n->t('Encryption not ready: %1$s', [$e->getMessage()]), 0, $e);
 		}
 		if ($e instanceof StorageNotAvailableException) {
-			throw new ServiceUnavailable('Failed to write file contents: ' . $e->getMessage(), 0, $e);
+			throw new ServiceUnavailable($this->l10n->t('Failed to write file contents: %1$s', [$e->getMessage()]), 0, $e);
 		}
 		if ($e instanceof NotFoundException) {
-			throw new NotFound('File not found: ' . $e->getMessage(), 0, $e);
+			throw new NotFound($this->l10n->t('File not found: %1$s', [$e->getMessage()]), 0, $e);
 		}
 
 		throw new \Sabre\DAV\Exception($e->getMessage(), 0, $e);
@@ -682,15 +609,25 @@ class File extends Node implements IFile {
 	 * @return string|null
 	 */
 	public function getChecksum() {
-		if (!$this->info) {
-			return null;
-		}
 		return $this->info->getChecksum();
+	}
+
+	public function setChecksum(string $checksum) {
+		$this->fileView->putFileInfo($this->path, ['checksum' => $checksum]);
+		$this->refreshInfo();
 	}
 
 	protected function header($string) {
 		if (!\OC::$CLI) {
 			\header($string);
 		}
+	}
+
+	public function hash(string $type) {
+		return $this->fileView->hash($type, $this->path);
+	}
+
+	public function getNode(): \OCP\Files\File {
+		return $this->node;
 	}
 }

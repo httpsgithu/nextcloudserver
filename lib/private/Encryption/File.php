@@ -1,74 +1,56 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Björn Schießle <bjoern@schiessle.org>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
- * @author Vincent Petry <vincent@nextcloud.com>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 namespace OC\Encryption;
 
-use OC\Cache\CappedMemoryCache;
 use OCA\Files_External\Service\GlobalStoragesService;
+use OCP\App\IAppManager;
+use OCP\Cache\CappedMemoryCache;
 use OCP\Files\IRootFolder;
 use OCP\Files\NotFoundException;
 use OCP\Share\IManager;
 
 class File implements \OCP\Encryption\IFile {
-
-	/** @var Util */
-	protected $util;
-
-	/** @var IRootFolder */
-	private $rootFolder;
-
-	/** @var IManager */
-	private $shareManager;
+	protected Util $util;
+	private IRootFolder $rootFolder;
+	private IManager $shareManager;
 
 	/**
-	 * cache results of already checked folders
-	 *
-	 * @var array
+	 * Cache results of already checked folders
+	 * @var CappedMemoryCache<array>
 	 */
-	protected $cache;
+	protected CappedMemoryCache $cache;
+	private ?IAppManager $appManager = null;
 
 	public function __construct(Util $util,
-								IRootFolder $rootFolder,
-								IManager $shareManager) {
+		IRootFolder $rootFolder,
+		IManager $shareManager) {
 		$this->util = $util;
 		$this->cache = new CappedMemoryCache();
 		$this->rootFolder = $rootFolder;
 		$this->shareManager = $shareManager;
 	}
 
+	public function getAppManager(): IAppManager {
+		// Lazy evaluate app manager as it initialize the db too early otherwise
+		if ($this->appManager) {
+			return $this->appManager;
+		}
+		$this->appManager = \OCP\Server::get(IAppManager::class);
+		return $this->appManager;
+	}
 
 	/**
-	 * get list of users with access to the file
+	 * Get list of users with access to the file
 	 *
 	 * @param string $path to the file
-	 * @return array  ['users' => $uniqueUserIds, 'public' => $public]
+	 * @return array{users: string[], public: bool}
 	 */
 	public function getAccessList($path) {
-
 		// Make sure that a share key is generated for the owner too
 		[$owner, $ownerPath] = $this->util->getUidAndFilename($path);
 
@@ -110,7 +92,7 @@ class File implements \OCP\Encryption\IFile {
 		}
 
 		// check if it is a group mount
-		if (\OCP\App::isEnabled("files_external")) {
+		if ($this->getAppManager()->isEnabledForUser('files_external')) {
 			/** @var GlobalStoragesService $storageService */
 			$storageService = \OC::$server->get(GlobalStoragesService::class);
 			$storages = $storageService->getAllStorages();

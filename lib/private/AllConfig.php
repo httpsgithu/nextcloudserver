@@ -1,50 +1,25 @@
 <?php
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Bart Visscher <bartv@thisnet.nl>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Jörn Friedrich Dreyer <jfd@butonic.de>
- * @author Loki3000 <github@labcms.ru>
- * @author Lukas Reschke <lukas@statuscode.ch>
- * @author MichaIng <micha@dietpi.com>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Robin Appelman <robin@icewind.nl>
- * @author Robin McCorkell <robin@mccorkell.me.uk>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 namespace OC;
 
-use OC\Cache\CappedMemoryCache;
+use NCU\Config\Exceptions\TypeConflictException;
+use NCU\Config\IUserConfig;
+use NCU\Config\ValueType;
+use OC\Config\UserConfig;
+use OCP\Cache\CappedMemoryCache;
+use OCP\IConfig;
 use OCP\IDBConnection;
 use OCP\PreConditionNotMetException;
 
 /**
  * Class to combine all the configuration options ownCloud offers
  */
-class AllConfig implements \OCP\IConfig {
-	/** @var SystemConfig */
-	private $systemConfig;
-
-	/** @var IDBConnection */
-	private $connection;
+class AllConfig implements IConfig {
+	private ?IDBConnection $connection = null;
 
 	/**
 	 * 3 dimensional array with the following structure:
@@ -66,14 +41,12 @@ class AllConfig implements \OCP\IConfig {
 	 *
 	 * @var CappedMemoryCache $userCache
 	 */
-	private $userCache;
+	private CappedMemoryCache $userCache;
 
-	/**
-	 * @param SystemConfig $systemConfig
-	 */
-	public function __construct(SystemConfig $systemConfig) {
+	public function __construct(
+		private SystemConfig $systemConfig,
+	) {
 		$this->userCache = new CappedMemoryCache();
-		$this->systemConfig = $systemConfig;
 	}
 
 	/**
@@ -91,7 +64,7 @@ class AllConfig implements \OCP\IConfig {
 	 */
 	private function fixDIInit() {
 		if ($this->connection === null) {
-			$this->connection = \OC::$server->getDatabaseConnection();
+			$this->connection = \OC::$server->get(IDBConnection::class);
 		}
 	}
 
@@ -137,7 +110,7 @@ class AllConfig implements \OCP\IConfig {
 	 * @since 16.0.0
 	 */
 	public function getSystemValueBool(string $key, bool $default = false): bool {
-		return (bool) $this->getSystemValue($key, $default);
+		return (bool)$this->getSystemValue($key, $default);
 	}
 
 	/**
@@ -151,7 +124,7 @@ class AllConfig implements \OCP\IConfig {
 	 * @since 16.0.0
 	 */
 	public function getSystemValueInt(string $key, int $default = 0): int {
-		return (int) $this->getSystemValue($key, $default);
+		return (int)$this->getSystemValue($key, $default);
 	}
 
 	/**
@@ -165,7 +138,7 @@ class AllConfig implements \OCP\IConfig {
 	 * @since 16.0.0
 	 */
 	public function getSystemValueString(string $key, string $default = ''): string {
-		return (string) $this->getSystemValue($key, $default);
+		return (string)$this->getSystemValue($key, $default);
 	}
 
 	/**
@@ -193,9 +166,10 @@ class AllConfig implements \OCP\IConfig {
 	 *
 	 * @param string $appName the appName that we stored the value under
 	 * @return string[] the keys stored for the app
+	 * @deprecated 29.0.0 Use {@see IAppConfig} directly
 	 */
 	public function getAppKeys($appName) {
-		return \OC::$server->query(\OC\AppConfig::class)->getKeys($appName);
+		return \OC::$server->get(AppConfig::class)->getKeys($appName);
 	}
 
 	/**
@@ -204,9 +178,10 @@ class AllConfig implements \OCP\IConfig {
 	 * @param string $appName the appName that we want to store the value under
 	 * @param string $key the key of the value, under which will be saved
 	 * @param string|float|int $value the value that should be stored
+	 * @deprecated 29.0.0 Use {@see IAppConfig} directly
 	 */
 	public function setAppValue($appName, $key, $value) {
-		\OC::$server->query(\OC\AppConfig::class)->setValue($appName, $key, $value);
+		\OC::$server->get(AppConfig::class)->setValue($appName, $key, $value);
 	}
 
 	/**
@@ -216,9 +191,10 @@ class AllConfig implements \OCP\IConfig {
 	 * @param string $key the key of the value, under which it was saved
 	 * @param string $default the default value to be returned if the value isn't set
 	 * @return string the saved value
+	 * @deprecated 29.0.0 Use {@see IAppConfig} directly
 	 */
 	public function getAppValue($appName, $key, $default = '') {
-		return \OC::$server->query(\OC\AppConfig::class)->getValue($appName, $key, $default);
+		return \OC::$server->get(AppConfig::class)->getValue($appName, $key, $default);
 	}
 
 	/**
@@ -226,18 +202,20 @@ class AllConfig implements \OCP\IConfig {
 	 *
 	 * @param string $appName the appName that we stored the value under
 	 * @param string $key the key of the value, under which it was saved
+	 * @deprecated 29.0.0 Use {@see IAppConfig} directly
 	 */
 	public function deleteAppValue($appName, $key) {
-		\OC::$server->query(\OC\AppConfig::class)->deleteKey($appName, $key);
+		\OC::$server->get(AppConfig::class)->deleteKey($appName, $key);
 	}
 
 	/**
 	 * Removes all keys in appconfig belonging to the app
 	 *
 	 * @param string $appName the appName the configs are stored under
+	 * @deprecated 29.0.0 Use {@see IAppConfig} directly
 	 */
 	public function deleteAppValues($appName) {
-		\OC::$server->query(\OC\AppConfig::class)->deleteApp($appName);
+		\OC::$server->get(AppConfig::class)->deleteApp($appName);
 	}
 
 
@@ -249,78 +227,62 @@ class AllConfig implements \OCP\IConfig {
 	 * @param string $key the key under which the value is being stored
 	 * @param string|float|int $value the value that you want to store
 	 * @param string $preCondition only update if the config value was previously the value passed as $preCondition
+	 *
 	 * @throws \OCP\PreConditionNotMetException if a precondition is specified and is not met
 	 * @throws \UnexpectedValueException when trying to store an unexpected value
+	 * @deprecated 31.0.0 - use {@see IUserConfig} directly
+	 * @see IUserConfig::getValueString
+	 * @see IUserConfig::getValueInt
+	 * @see IUserConfig::getValueFloat
+	 * @see IUserConfig::getValueArray
+	 * @see IUserConfig::getValueBool
 	 */
 	public function setUserValue($userId, $appName, $key, $value, $preCondition = null) {
 		if (!is_int($value) && !is_float($value) && !is_string($value)) {
 			throw new \UnexpectedValueException('Only integers, floats and strings are allowed as value');
 		}
 
-		// TODO - FIXME
-		$this->fixDIInit();
-
-		$prevValue = $this->getUserValue($userId, $appName, $key, null);
-
-		if ($prevValue !== null) {
-			if ($prevValue === (string)$value) {
-				return;
-			} elseif ($preCondition !== null && $prevValue !== (string)$preCondition) {
-				throw new PreConditionNotMetException();
-			} else {
-				$qb = $this->connection->getQueryBuilder();
-				$qb->update('preferences')
-					->set('configvalue', $qb->createNamedParameter($value))
-					->where($qb->expr()->eq('userid', $qb->createNamedParameter($userId)))
-					->andWhere($qb->expr()->eq('appid', $qb->createNamedParameter($appName)))
-					->andWhere($qb->expr()->eq('configkey', $qb->createNamedParameter($key)));
-				$qb->execute();
-
-				$this->userCache[$userId][$appName][$key] = (string)$value;
-				return;
+		/** @var UserConfig $userPreferences */
+		$userPreferences = \OCP\Server::get(IUserConfig::class);
+		if ($preCondition !== null) {
+			try {
+				if ($userPreferences->hasKey($userId, $appName, $key) && $userPreferences->getValueMixed($userId, $appName, $key) !== (string)$preCondition) {
+					throw new PreConditionNotMetException();
+				}
+			} catch (TypeConflictException) {
 			}
 		}
 
-		$preconditionArray = [];
-		if (isset($preCondition)) {
-			$preconditionArray = [
-				'configvalue' => $preCondition,
-			];
-		}
-
-		$this->connection->setValues('preferences', [
-			'userid' => $userId,
-			'appid' => $appName,
-			'configkey' => $key,
-		], [
-			'configvalue' => $value,
-		], $preconditionArray);
-
-		// only add to the cache if we already loaded data for the user
-		if (isset($this->userCache[$userId])) {
-			if (!isset($this->userCache[$userId][$appName])) {
-				$this->userCache[$userId][$appName] = [];
-			}
-			$this->userCache[$userId][$appName][$key] = (string)$value;
-		}
+		$userPreferences->setValueMixed($userId, $appName, $key, (string)$value);
 	}
 
 	/**
 	 * Getting a user defined value
 	 *
-	 * @param string $userId the userId of the user that we want to store the value under
+	 * @param ?string $userId the userId of the user that we want to store the value under
 	 * @param string $appName the appName that we stored the value under
 	 * @param string $key the key under which the value is being stored
 	 * @param mixed $default the default value to be returned if the value isn't set
+	 *
 	 * @return string
+	 * @deprecated 31.0.0 - use {@see IUserConfig} directly
+	 * @see IUserConfig::getValueString
+	 * @see IUserConfig::getValueInt
+	 * @see IUserConfig::getValueFloat
+	 * @see IUserConfig::getValueArray
+	 * @see IUserConfig::getValueBool
 	 */
 	public function getUserValue($userId, $appName, $key, $default = '') {
-		$data = $this->getUserValues($userId);
-		if (isset($data[$appName][$key])) {
-			return $data[$appName][$key];
-		} else {
+		if ($userId === null || $userId === '') {
 			return $default;
 		}
+		/** @var UserConfig $userPreferences */
+		$userPreferences = \OCP\Server::get(IUserConfig::class);
+		// because $default can be null ...
+		if (!$userPreferences->hasKey($userId, $appName, $key)) {
+			return $default;
+		}
+		return $userPreferences->getValueMixed($userId, $appName, $key, $default ?? '');
 	}
 
 	/**
@@ -328,15 +290,12 @@ class AllConfig implements \OCP\IConfig {
 	 *
 	 * @param string $userId the userId of the user that we want to store the value under
 	 * @param string $appName the appName that we stored the value under
+	 *
 	 * @return string[]
+	 * @deprecated 31.0.0 - use {@see IUserConfig::getKeys} directly
 	 */
 	public function getUserKeys($userId, $appName) {
-		$data = $this->getUserValues($userId);
-		if (isset($data[$appName])) {
-			return array_keys($data[$appName]);
-		} else {
-			return [];
-		}
+		return \OCP\Server::get(IUserConfig::class)->getKeys($userId, $appName);
 	}
 
 	/**
@@ -345,87 +304,63 @@ class AllConfig implements \OCP\IConfig {
 	 * @param string $userId the userId of the user that we want to store the value under
 	 * @param string $appName the appName that we stored the value under
 	 * @param string $key the key under which the value is being stored
+	 *
+	 * @deprecated 31.0.0 - use {@see IUserConfig::deleteUserConfig} directly
 	 */
 	public function deleteUserValue($userId, $appName, $key) {
-		// TODO - FIXME
-		$this->fixDIInit();
-
-		$sql = 'DELETE FROM `*PREFIX*preferences` '.
-				'WHERE `userid` = ? AND `appid` = ? AND `configkey` = ?';
-		$this->connection->executeUpdate($sql, [$userId, $appName, $key]);
-
-		if (isset($this->userCache[$userId][$appName])) {
-			unset($this->userCache[$userId][$appName][$key]);
-		}
+		\OCP\Server::get(IUserConfig::class)->deleteUserConfig($userId, $appName, $key);
 	}
 
 	/**
 	 * Delete all user values
 	 *
 	 * @param string $userId the userId of the user that we want to remove all values from
+	 *
+	 * @deprecated 31.0.0 - use {@see IUserConfig::deleteAllUserConfig} directly
 	 */
 	public function deleteAllUserValues($userId) {
-		// TODO - FIXME
-		$this->fixDIInit();
-
-		$sql = 'DELETE FROM `*PREFIX*preferences` '.
-			'WHERE `userid` = ?';
-		$this->connection->executeUpdate($sql, [$userId]);
-
-		unset($this->userCache[$userId]);
+		if ($userId === null) {
+			return;
+		}
+		\OCP\Server::get(IUserConfig::class)->deleteAllUserConfig($userId);
 	}
 
 	/**
 	 * Delete all user related values of one app
 	 *
 	 * @param string $appName the appName of the app that we want to remove all values from
+	 *
+	 * @deprecated 31.0.0 - use {@see IUserConfig::deleteApp} directly
 	 */
 	public function deleteAppFromAllUsers($appName) {
-		// TODO - FIXME
-		$this->fixDIInit();
-
-		$sql = 'DELETE FROM `*PREFIX*preferences` '.
-				'WHERE `appid` = ?';
-		$this->connection->executeUpdate($sql, [$appName]);
-
-		foreach ($this->userCache as &$userCache) {
-			unset($userCache[$appName]);
-		}
+		\OCP\Server::get(IUserConfig::class)->deleteApp($appName);
 	}
 
 	/**
 	 * Returns all user configs sorted by app of one user
 	 *
-	 * @param string $userId the user ID to get the app configs from
+	 * @param ?string $userId the user ID to get the app configs from
+	 *
+	 * @psalm-return array<string, array<string, string>>
 	 * @return array[] - 2 dimensional array with the following structure:
-	 *     [ $appId =>
-	 *         [ $key => $value ]
-	 *     ]
+	 *                 [ $appId =>
+	 *                 [ $key => $value ]
+	 *                 ]
+	 * @deprecated 31.0.0 - use {@see IUserConfig::getAllValues} directly
 	 */
-	private function getUserValues($userId) {
-		if (isset($this->userCache[$userId])) {
-			return $this->userCache[$userId];
-		}
+	public function getAllUserValues(?string $userId): array {
 		if ($userId === null || $userId === '') {
-			$this->userCache[$userId] = [];
-			return $this->userCache[$userId];
+			return [];
 		}
 
-		// TODO - FIXME
-		$this->fixDIInit();
-
-		$data = [];
-		$query = 'SELECT `appid`, `configkey`, `configvalue` FROM `*PREFIX*preferences` WHERE `userid` = ?';
-		$result = $this->connection->executeQuery($query, [$userId]);
-		while ($row = $result->fetch()) {
-			$appId = $row['appid'];
-			if (!isset($data[$appId])) {
-				$data[$appId] = [];
+		$values = \OCP\Server::get(IUserConfig::class)->getAllValues($userId);
+		$result = [];
+		foreach ($values as $app => $list) {
+			foreach ($list as $key => $value) {
+				$result[$app][$key] = (string)$value;
 			}
-			$data[$appId][$row['configkey']] = $row['configvalue'];
 		}
-		$this->userCache[$userId] = $data;
-		return $data;
+		return $result;
 	}
 
 	/**
@@ -434,40 +369,12 @@ class AllConfig implements \OCP\IConfig {
 	 * @param string $appName app to get the value for
 	 * @param string $key the key to get the value for
 	 * @param array $userIds the user IDs to fetch the values for
+	 *
 	 * @return array Mapped values: userId => value
+	 * @deprecated 31.0.0 - use {@see IUserConfig::getValuesByUsers} directly
 	 */
 	public function getUserValueForUsers($appName, $key, $userIds) {
-		// TODO - FIXME
-		$this->fixDIInit();
-
-		if (empty($userIds) || !is_array($userIds)) {
-			return [];
-		}
-
-		$chunkedUsers = array_chunk($userIds, 50, true);
-		$placeholders50 = implode(',', array_fill(0, 50, '?'));
-
-		$userValues = [];
-		foreach ($chunkedUsers as $chunk) {
-			$queryParams = $chunk;
-			// create [$app, $key, $chunkedUsers]
-			array_unshift($queryParams, $key);
-			array_unshift($queryParams, $appName);
-
-			$placeholders = (count($chunk) === 50) ? $placeholders50 :  implode(',', array_fill(0, count($chunk), '?'));
-
-			$query = 'SELECT `userid`, `configvalue` ' .
-						'FROM `*PREFIX*preferences` ' .
-						'WHERE `appid` = ? AND `configkey` = ? ' .
-						'AND `userid` IN (' . $placeholders . ')';
-			$result = $this->connection->executeQuery($query, $queryParams);
-
-			while ($row = $result->fetch()) {
-				$userValues[$row['userid']] = $row['configvalue'];
-			}
-		}
-
-		return $userValues;
+		return \OCP\Server::get(IUserConfig::class)->getValuesByUsers($appName, $key, ValueType::MIXED, $userIds);
 	}
 
 	/**
@@ -476,30 +383,14 @@ class AllConfig implements \OCP\IConfig {
 	 * @param string $appName the app to get the user for
 	 * @param string $key the key to get the user for
 	 * @param string $value the value to get the user for
-	 * @return array of user IDs
+	 *
+	 * @return list<string> of user IDs
+	 * @deprecated 31.0.0 - use {@see IUserConfig::searchUsersByValueString} directly
 	 */
 	public function getUsersForUserValue($appName, $key, $value) {
-		// TODO - FIXME
-		$this->fixDIInit();
-
-		$sql = 'SELECT `userid` FROM `*PREFIX*preferences` ' .
-				'WHERE `appid` = ? AND `configkey` = ? ';
-
-		if ($this->getSystemValue('dbtype', 'sqlite') === 'oci') {
-			//oracle hack: need to explicitly cast CLOB to CHAR for comparison
-			$sql .= 'AND to_char(`configvalue`) = ?';
-		} else {
-			$sql .= 'AND `configvalue` = ?';
-		}
-
-		$result = $this->connection->executeQuery($sql, [$appName, $key, $value]);
-
-		$userIDs = [];
-		while ($row = $result->fetch()) {
-			$userIDs[] = $row['userid'];
-		}
-
-		return $userIDs;
+		/** @var list<string> $result */
+		$result = iterator_to_array(\OCP\Server::get(IUserConfig::class)->searchUsersByValueString($appName, $key, $value));
+		return $result;
 	}
 
 	/**
@@ -508,30 +399,18 @@ class AllConfig implements \OCP\IConfig {
 	 * @param string $appName the app to get the user for
 	 * @param string $key the key to get the user for
 	 * @param string $value the value to get the user for
-	 * @return array of user IDs
+	 *
+	 * @return list<string> of user IDs
+	 * @deprecated 31.0.0 - use {@see IUserConfig::searchUsersByValueString} directly
 	 */
 	public function getUsersForUserValueCaseInsensitive($appName, $key, $value) {
-		// TODO - FIXME
-		$this->fixDIInit();
-
-		$sql = 'SELECT `userid` FROM `*PREFIX*preferences` ' .
-			'WHERE `appid` = ? AND `configkey` = ? ';
-
-		if ($this->getSystemValue('dbtype', 'sqlite') === 'oci') {
-			//oracle hack: need to explicitly cast CLOB to CHAR for comparison
-			$sql .= 'AND LOWER(to_char(`configvalue`)) = LOWER(?)';
-		} else {
-			$sql .= 'AND LOWER(`configvalue`) = LOWER(?)';
+		if ($appName === 'settings' && $key === 'email') {
+			return $this->getUsersForUserValue($appName, $key, strtolower($value));
 		}
 
-		$result = $this->connection->executeQuery($sql, [$appName, $key, $value]);
-
-		$userIDs = [];
-		while ($row = $result->fetch()) {
-			$userIDs[] = $row['userid'];
-		}
-
-		return $userIDs;
+		/** @var list<string> $result */
+		$result = iterator_to_array(\OCP\Server::get(IUserConfig::class)->searchUsersByValueString($appName, $key, $value, true));
+		return $result;
 	}
 
 	public function getSystemConfig() {

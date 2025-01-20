@@ -1,29 +1,11 @@
 <?php
 /**
- * @copyright Copyright (c) 2016 Joas Schilling <coding@schilljs.com>
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Morris Jobke <hey@morrisjobke.de>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2016 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 namespace OCA\Comments\Activity;
 
+use OCP\Activity\Exceptions\UnknownActivityException;
 use OCP\Activity\IEvent;
 use OCP\Activity\IManager;
 use OCP\Activity\IProvider;
@@ -31,46 +13,19 @@ use OCP\Comments\ICommentsManager;
 use OCP\Comments\NotFoundException;
 use OCP\IL10N;
 use OCP\IURLGenerator;
-use OCP\IUser;
 use OCP\IUserManager;
 use OCP\L10N\IFactory;
 
 class Provider implements IProvider {
+	protected ?IL10N $l = null;
 
-	/** @var IFactory */
-	protected $languageFactory;
-
-	/** @var IL10N */
-	protected $l;
-
-	/** @var IURLGenerator */
-	protected $url;
-
-	/** @var ICommentsManager */
-	protected $commentsManager;
-
-	/** @var IUserManager */
-	protected $userManager;
-
-	/** @var IManager */
-	protected $activityManager;
-
-	/** @var string[] */
-	protected $displayNames = [];
-
-	/**
-	 * @param IFactory $languageFactory
-	 * @param IURLGenerator $url
-	 * @param ICommentsManager $commentsManager
-	 * @param IUserManager $userManager
-	 * @param IManager $activityManager
-	 */
-	public function __construct(IFactory $languageFactory, IURLGenerator $url, ICommentsManager $commentsManager, IUserManager $userManager, IManager $activityManager) {
-		$this->languageFactory = $languageFactory;
-		$this->url = $url;
-		$this->commentsManager = $commentsManager;
-		$this->userManager = $userManager;
-		$this->activityManager = $activityManager;
+	public function __construct(
+		protected IFactory $languageFactory,
+		protected IURLGenerator $url,
+		protected ICommentsManager $commentsManager,
+		protected IUserManager $userManager,
+		protected IManager $activityManager,
+	) {
 	}
 
 	/**
@@ -78,12 +33,12 @@ class Provider implements IProvider {
 	 * @param IEvent $event
 	 * @param IEvent|null $previousEvent
 	 * @return IEvent
-	 * @throws \InvalidArgumentException
+	 * @throws UnknownActivityException
 	 * @since 11.0.0
 	 */
-	public function parse($language, IEvent $event, IEvent $previousEvent = null) {
+	public function parse($language, IEvent $event, ?IEvent $previousEvent = null): IEvent {
 		if ($event->getApp() !== 'comments') {
-			throw new \InvalidArgumentException();
+			throw new UnknownActivityException();
 		}
 
 		$this->l = $this->languageFactory->get('comments', $language);
@@ -99,49 +54,43 @@ class Provider implements IProvider {
 			if ($this->activityManager->isFormattingFilteredObject()) {
 				try {
 					return $this->parseShortVersion($event);
-				} catch (\InvalidArgumentException $e) {
+				} catch (UnknownActivityException) {
 					// Ignore and simply use the long version...
 				}
 			}
 
 			return $this->parseLongVersion($event);
-		} else {
-			throw new \InvalidArgumentException();
 		}
+		throw new UnknownActivityException();
+
 	}
 
 	/**
-	 * @param IEvent $event
-	 * @return IEvent
-	 * @throws \InvalidArgumentException
+	 * @throws UnknownActivityException
 	 */
-	protected function parseShortVersion(IEvent $event) {
+	protected function parseShortVersion(IEvent $event): IEvent {
 		$subjectParameters = $this->getSubjectParameters($event);
 
 		if ($event->getSubject() === 'add_comment_subject') {
 			if ($subjectParameters['actor'] === $this->activityManager->getCurrentUserId()) {
-				$event->setParsedSubject($this->l->t('You commented'))
-					->setRichSubject($this->l->t('You commented'), []);
+				$event->setRichSubject($this->l->t('You commented'), []);
 			} else {
 				$author = $this->generateUserParameter($subjectParameters['actor']);
-				$event->setParsedSubject($this->l->t('%1$s commented', [$author['name']]))
-					->setRichSubject($this->l->t('{author} commented'), [
-						'author' => $author,
-					]);
+				$event->setRichSubject($this->l->t('{author} commented'), [
+					'author' => $author,
+				]);
 			}
 		} else {
-			throw new \InvalidArgumentException();
+			throw new UnknownActivityException();
 		}
 
 		return $event;
 	}
 
 	/**
-	 * @param IEvent $event
-	 * @return IEvent
-	 * @throws \InvalidArgumentException
+	 * @throws UnknownActivityException
 	 */
-	protected function parseLongVersion(IEvent $event) {
+	protected function parseLongVersion(IEvent $event): IEvent {
 		$subjectParameters = $this->getSubjectParameters($event);
 
 		if ($event->getSubject() === 'add_comment_subject') {
@@ -164,13 +113,13 @@ class Provider implements IProvider {
 					]);
 			}
 		} else {
-			throw new \InvalidArgumentException();
+			throw new UnknownActivityException();
 		}
 
 		return $event;
 	}
 
-	protected function getSubjectParameters(IEvent $event) {
+	protected function getSubjectParameters(IEvent $event): array {
 		$subjectParameters = $event->getSubjectParameters();
 		if (isset($subjectParameters['fileId'])) {
 			return $subjectParameters;
@@ -190,20 +139,17 @@ class Provider implements IProvider {
 		];
 	}
 
-	/**
-	 * @param IEvent $event
-	 */
-	protected function parseMessage(IEvent $event) {
+	protected function parseMessage(IEvent $event): void {
 		$messageParameters = $event->getMessageParameters();
 		if (empty($messageParameters)) {
 			// Email
 			return;
 		}
 
-		$commentId = isset($messageParameters['commentId']) ? $messageParameters['commentId'] : $messageParameters[0];
+		$commentId = $messageParameters['commentId'] ?? $messageParameters[0];
 
 		try {
-			$comment = $this->commentsManager->get((string) $commentId);
+			$comment = $this->commentsManager->get((string)$commentId);
 			$message = $comment->getMessage();
 
 			$mentionCount = 1;
@@ -214,7 +160,7 @@ class Provider implements IProvider {
 				}
 
 				$message = str_replace('@"' . $mention['id'] . '"', '{mention' . $mentionCount . '}', $message);
-				if (strpos($mention['id'], ' ') === false && strpos($mention['id'], 'guest/') !== 0) {
+				if (!str_contains($mention['id'], ' ') && !str_starts_with($mention['id'], 'guest/')) {
 					$message = str_replace('@' . $mention['id'], '{mention' . $mentionCount . '}', $message);
 				}
 
@@ -228,12 +174,7 @@ class Provider implements IProvider {
 		}
 	}
 
-	/**
-	 * @param int $id
-	 * @param string $path
-	 * @return array
-	 */
-	protected function generateFileParameter($id, $path) {
+	protected function generateFileParameter(int $id, string $path): array {
 		return [
 			'type' => 'file',
 			'id' => $id,
@@ -243,32 +184,11 @@ class Provider implements IProvider {
 		];
 	}
 
-	/**
-	 * @param string $uid
-	 * @return array
-	 */
-	protected function generateUserParameter($uid) {
-		if (!isset($this->displayNames[$uid])) {
-			$this->displayNames[$uid] = $this->getDisplayName($uid);
-		}
-
+	protected function generateUserParameter(string $uid): array {
 		return [
 			'type' => 'user',
 			'id' => $uid,
-			'name' => $this->displayNames[$uid],
+			'name' => $this->userManager->getDisplayName($uid) ?? $uid,
 		];
-	}
-
-	/**
-	 * @param string $uid
-	 * @return string
-	 */
-	protected function getDisplayName($uid) {
-		$user = $this->userManager->get($uid);
-		if ($user instanceof IUser) {
-			return $user->getDisplayName();
-		} else {
-			return $uid;
-		}
 	}
 }

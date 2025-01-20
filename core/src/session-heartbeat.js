@@ -1,26 +1,6 @@
 /**
- * @copyright 2019 Christoph Wurst <christoph@winzerhof-wurst.at>
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author John Molakvoæ <skjnldsv@protonmail.com>
- * @author Julius Härtl <jus@bitgrid.net>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 import $ from 'jquery'
@@ -29,8 +9,8 @@ import { loadState } from '@nextcloud/initial-state'
 import { getCurrentUser } from '@nextcloud/auth'
 import { generateUrl } from '@nextcloud/router'
 
-import OC from './OC'
-import { setToken as setRequestToken, getToken as getRequestToken } from './OC/requesttoken'
+import OC from './OC/index.js'
+import { setToken as setRequestToken, getToken as getRequestToken } from './OC/requesttoken.js'
 
 let config = null
 /**
@@ -48,7 +28,8 @@ const loadConfig = () => {
 
 /**
  * session heartbeat (defaults to enabled)
- * @returns {boolean}
+ *
+ * @return {boolean}
  */
 const keepSessionAlive = () => {
 	return config.session_keepalive === undefined
@@ -57,7 +38,8 @@ const keepSessionAlive = () => {
 
 /**
  * get interval in seconds
- * @returns {Number}
+ *
+ * @return {number}
  */
 const getInterval = () => {
 	let interval = NaN
@@ -70,12 +52,12 @@ const getInterval = () => {
 		24 * 3600,
 		Math.max(
 			60,
-			isNaN(interval) ? 900 : interval
-		)
+			isNaN(interval) ? 900 : interval,
+		),
 	)
 }
 
-const getToken = async() => {
+const getToken = async () => {
 	const url = generateUrl('/csrftoken')
 
 	// Not using Axios here as Axios is not stubbable with the sinon fake server
@@ -86,7 +68,7 @@ const getToken = async() => {
 	return resp.token
 }
 
-const poll = async() => {
+const poll = async () => {
 	try {
 		const token = await getToken()
 		setRequestToken(token)
@@ -126,14 +108,17 @@ const registerAutoLogout = () => {
 		lastActive = e.newValue
 	})
 
-	setInterval(function() {
+	let intervalId = 0
+	const logoutCheck = () => {
 		const timeout = Date.now() - config.session_lifetime * 1000
 		if (lastActive < timeout) {
+			clearTimeout(intervalId)
 			console.info('Inactivity timout reached, logging out')
 			const logoutUrl = generateUrl('/logout') + '?requesttoken=' + encodeURIComponent(getRequestToken())
 			window.location = logoutUrl
 		}
-	}, 1000)
+	}
+	intervalId = setInterval(logoutCheck, 1000)
 }
 
 /**
@@ -151,7 +136,7 @@ export const initSessionHeartBeat = () => {
 	}
 	let interval = startPolling()
 
-	window.addEventListener('online', async() => {
+	window.addEventListener('online', async () => {
 		console.info('browser is online again, resuming heartbeat')
 		interval = startPolling()
 		try {

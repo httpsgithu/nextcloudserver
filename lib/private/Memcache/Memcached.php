@@ -1,33 +1,8 @@
 <?php
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Andreas Fischer <bantu@owncloud.com>
- * @author Bart Visscher <bartv@thisnet.nl>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Jörn Friedrich Dreyer <jfd@butonic.de>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Robin Appelman <robin@icewind.nl>
- * @author Robin McCorkell <robin@mccorkell.me.uk>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
- * @author Victor Dubiniuk <dubiniuk@owncloud.com>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 namespace OC\Memcache;
 
@@ -63,9 +38,15 @@ class Memcached extends Cache implements IMemcache {
 				\Memcached::OPT_LIBKETAMA_COMPATIBLE => true,
 
 				// Enable Binary Protocol
-				//\Memcached::OPT_BINARY_PROTOCOL =>      true,
+				\Memcached::OPT_BINARY_PROTOCOL => true,
 			];
-			// by default enable igbinary serializer if available
+			/**
+			 * By default enable igbinary serializer if available
+			 *
+			 * Psalm checks depend on if igbinary is installed or not with memcached
+			 * @psalm-suppress RedundantCondition
+			 * @psalm-suppress TypeDoesNotContainType
+			 */
 			if (\Memcached::HAVE_IGBINARY) {
 				$defaultOptions[\Memcached::OPT_SERIALIZER] =
 					\Memcached::SERIALIZER_IGBINARY;
@@ -113,10 +94,7 @@ class Memcached extends Cache implements IMemcache {
 		} else {
 			$result = self::$cache->set($this->getNameSpace() . $key, $value);
 		}
-		if ($result !== true) {
-			$this->verifyReturnCode();
-		}
-		return $result;
+		return $result || $this->isSuccess();
 	}
 
 	public function hasKey($key) {
@@ -126,34 +104,12 @@ class Memcached extends Cache implements IMemcache {
 
 	public function remove($key) {
 		$result = self::$cache->delete($this->getNameSpace() . $key);
-		if (self::$cache->getResultCode() !== \Memcached::RES_NOTFOUND) {
-			$this->verifyReturnCode();
-		}
-		return $result;
+		return $result || $this->isSuccess() || self::$cache->getResultCode() === \Memcached::RES_NOTFOUND;
 	}
 
 	public function clear($prefix = '') {
-		$prefix = $this->getNameSpace() . $prefix;
-		$allKeys = self::$cache->getAllKeys();
-		if ($allKeys === false) {
-			// newer Memcached doesn't like getAllKeys(), flush everything
-			self::$cache->flush();
-			return true;
-		}
-		$keys = [];
-		$prefixLength = strlen($prefix);
-		foreach ($allKeys as $key) {
-			if (substr($key, 0, $prefixLength) === $prefix) {
-				$keys[] = $key;
-			}
-		}
-		if (method_exists(self::$cache, 'deleteMulti')) {
-			self::$cache->deleteMulti($keys);
-		} else {
-			foreach ($keys as $key) {
-				self::$cache->delete($key);
-			}
-		}
+		// Newer Memcached doesn't like getAllKeys(), flush everything
+		self::$cache->flush();
 		return true;
 	}
 
@@ -164,14 +120,10 @@ class Memcached extends Cache implements IMemcache {
 	 * @param mixed $value
 	 * @param int $ttl Time To Live in seconds. Defaults to 60*60*24
 	 * @return bool
-	 * @throws \Exception
 	 */
 	public function add($key, $value, $ttl = 0) {
 		$result = self::$cache->add($this->getPrefix() . $key, $value, $ttl);
-		if (self::$cache->getResultCode() !== \Memcached::RES_NOTSTORED) {
-			$this->verifyReturnCode();
-		}
-		return $result;
+		return $result || $this->isSuccess();
 	}
 
 	/**
@@ -209,19 +161,11 @@ class Memcached extends Cache implements IMemcache {
 		return $result;
 	}
 
-	public static function isAvailable() {
+	public static function isAvailable(): bool {
 		return extension_loaded('memcached');
 	}
 
-	/**
-	 * @throws \Exception
-	 */
-	private function verifyReturnCode() {
-		$code = self::$cache->getResultCode();
-		if ($code === \Memcached::RES_SUCCESS) {
-			return;
-		}
-		$message = self::$cache->getResultMessage();
-		throw new \Exception("Error $code interacting with memcached : $message");
+	private function isSuccess(): bool {
+		return self::$cache->getResultCode() === \Memcached::RES_SUCCESS;
 	}
 }

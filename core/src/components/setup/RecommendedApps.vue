@@ -1,26 +1,10 @@
 <!--
-  - @copyright 2019 Christoph Wurst <christoph@winzerhof-wurst.at>
-  -
-  - @author 2019 Christoph Wurst <christoph@winzerhof-wurst.at>
-  -
-  - @license GNU AGPL version 3 or any later version
-  -
-  - This program is free software: you can redistribute it and/or modify
-  - it under the terms of the GNU Affero General Public License as
-  - published by the Free Software Foundation, either version 3 of the
-  - License, or (at your option) any later version.
-  -
-  - This program is distributed in the hope that it will be useful,
-  - but WITHOUT ANY WARRANTY; without even the implied warranty of
-  - MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  - GNU Affero General Public License for more details.
-  -
-  - You should have received a copy of the GNU Affero General Public License
-  - along with this program.  If not, see <http://www.gnu.org/licenses/>.
-  -->
+  - SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
+-->
 
 <template>
-	<div class="body-login-container">
+	<div class="guest-box">
 		<h2>{{ t('core', 'Recommended apps') }}</h2>
 		<p v-if="loadingApps" class="loading text-center">
 			{{ t('core', 'Loading apps …') }}
@@ -28,43 +12,58 @@
 		<p v-else-if="loadingAppsError" class="loading-error text-center">
 			{{ t('core', 'Could not fetch list of apps from the App Store.') }}
 		</p>
-		<p v-else class="text-center">
-			{{ t('core', 'Installing apps …') }}
-		</p>
+
 		<div v-for="app in recommendedApps" :key="app.id" class="app">
-			<img :src="customIcon(app.id)" alt="">
-			<div class="info">
-				<h3>
-					{{ app.name }}
-					<span v-if="app.loading" class="icon icon-loading-small-dark" />
-					<span v-else-if="app.active" class="icon icon-checkmark-white" />
-				</h3>
-				<p v-html="customDescription(app.id)" />
-				<p v-if="app.installationError">
-					<strong>{{ t('core', 'App download or installation failed') }}</strong>
-				</p>
-				<p v-else-if="!app.isCompatible">
-					<strong>{{ t('core', 'Cannot install this app because it is not compatible') }}</strong>
-				</p>
-				<p v-else-if="!app.canInstall">
-					<strong>{{ t('core', 'Cannot install this app') }}</strong>
-				</p>
-			</div>
+			<template v-if="!isHidden(app.id)">
+				<img :src="customIcon(app.id)" alt="">
+				<div class="info">
+					<h3>{{ customName(app) }}</h3>
+					<p v-text="customDescription(app.id)" />
+					<p v-if="app.installationError">
+						<strong>{{ t('core', 'App download or installation failed') }}</strong>
+					</p>
+					<p v-else-if="!app.isCompatible">
+						<strong>{{ t('core', 'Cannot install this app because it is not compatible') }}</strong>
+					</p>
+					<p v-else-if="!app.canInstall">
+						<strong>{{ t('core', 'Cannot install this app') }}</strong>
+					</p>
+				</div>
+				<NcCheckboxRadioSwitch :checked="app.isSelected || app.active"
+					:disabled="!app.isCompatible || app.active"
+					:loading="app.loading"
+					@update:checked="toggleSelect(app.id)" />
+			</template>
 		</div>
-		<p class="text-center">
-			<a :href="defaultPageUrl">{{ t('core', 'Cancel') }}</a>
-		</p>
+
+		<div class="dialog-row">
+			<NcButton v-if="showInstallButton && !installingApps"
+				type="tertiary"
+				role="link"
+				:href="defaultPageUrl">
+				{{ t('core', 'Skip') }}
+			</NcButton>
+
+			<NcButton v-if="showInstallButton"
+				type="primary"
+				:disabled="installingApps || !isAnyAppSelected"
+				@click.stop.prevent="installApps">
+				{{ installingApps ? t('core', 'Installing apps …') : t('core', 'Install recommended apps') }}
+			</NcButton>
+		</div>
 	</div>
 </template>
 
 <script>
-import axios from '@nextcloud/axios'
-import { generateUrl, imagePath } from '@nextcloud/router'
+import { t } from '@nextcloud/l10n'
 import { loadState } from '@nextcloud/initial-state'
+import { generateUrl, imagePath } from '@nextcloud/router'
+import axios from '@nextcloud/axios'
 import pLimit from 'p-limit'
-import { translate as t } from '@nextcloud/l10n'
+import logger from '../../logger.js'
 
-import logger from '../../logger'
+import NcButton from '@nextcloud/vue/dist/Components/NcButton.js'
+import NcCheckboxRadioSwitch from '@nextcloud/vue/dist/Components/NcCheckboxRadioSwitch.js'
 
 const recommended = {
 	calendar: {
@@ -80,72 +79,85 @@ const recommended = {
 		icon: imagePath('core', 'actions/mail.svg'),
 	},
 	spreed: {
-		description: t('core', 'Chatting, video calls, screensharing, online meetings and web conferencing – in your browser and with mobile apps.'),
-		icon: imagePath('core', 'apps/spreed.svg')
+		description: t('core', 'Chatting, video calls, screen sharing, online meetings and web conferencing – in your browser and with mobile apps.'),
+		icon: imagePath('core', 'apps/spreed.svg'),
 	},
 	richdocuments: {
-		description: t('core', 'Collaboratively edit office documents.'),
-		icon: imagePath('core', 'apps/richdocuments.svg')
+		name: 'Nextcloud Office',
+		description: t('core', 'Collaborative documents, spreadsheets and presentations, built on Collabora Online.'),
+		icon: imagePath('core', 'apps/richdocuments.svg'),
+	},
+	notes: {
+		description: t('core', 'Distraction free note taking app.'),
+		icon: imagePath('core', 'apps/notes.svg'),
 	},
 	richdocumentscode: {
-		description: t('core', 'Local document editing back-end used by the Collabora Online app.'),
-		icon: imagePath('core', 'apps/richdocumentscode.svg')
+		hidden: true,
 	},
 }
 const recommendedIds = Object.keys(recommended)
-const defaultPageUrl = loadState('core', 'defaultPageUrl')
 
 export default {
 	name: 'RecommendedApps',
+	components: {
+		NcCheckboxRadioSwitch,
+		NcButton,
+	},
 	data() {
 		return {
+			showInstallButton: false,
+			installingApps: false,
 			loadingApps: true,
 			loadingAppsError: false,
 			apps: [],
-			defaultPageUrl,
+			defaultPageUrl: loadState('core', 'defaultPageUrl'),
 		}
 	},
 	computed: {
 		recommendedApps() {
 			return this.apps.filter(app => recommendedIds.includes(app.id))
 		},
+		isAnyAppSelected() {
+			return this.recommendedApps.some(app => app.isSelected)
+		},
 	},
-	mounted() {
-		return axios.get(generateUrl('settings/apps/list'))
-			.then(resp => resp.data)
-			.then(data => {
-				logger.info(`${data.apps.length} apps fetched`)
+	async mounted() {
+		try {
+			const { data } = await axios.get(generateUrl('settings/apps/list'))
+			logger.info(`${data.apps.length} apps fetched`)
 
-				this.apps = data.apps.map(app => Object.assign(app, { loading: false, installationError: false }))
-				logger.debug(`${this.recommendedApps.length} recommended apps found`, { apps: this.recommendedApps })
+			this.apps = data.apps.map(app => Object.assign(app, { loading: false, installationError: false, isSelected: app.isCompatible }))
+			logger.debug(`${this.recommendedApps.length} recommended apps found`, { apps: this.recommendedApps })
 
-				this.installApps()
-			})
-			.catch(error => {
-				logger.error('could not fetch app list', { error })
+			this.showInstallButton = true
+		} catch (error) {
+			logger.error('could not fetch app list', { error })
 
-				this.loadingAppsError = true
-			})
-			.then(() => {
-				this.loadingApps = false
-			})
+			this.loadingAppsError = true
+		} finally {
+			this.loadingApps = false
+		}
 	},
 	methods: {
 		installApps() {
+			this.installingApps = true
+
 			const limit = pLimit(1)
 			const installing = this.recommendedApps
-				.filter(app => !app.active && app.isCompatible && app.canInstall)
-				.map(app => limit(() => {
+				.filter(app => !app.active && app.isCompatible && app.canInstall && app.isSelected)
+				.map(app => limit(async () => {
 					logger.info(`installing ${app.id}`)
 					app.loading = true
 					return axios.post(generateUrl('settings/apps/enable'), { appIds: [app.id], groups: [] })
 						.catch(error => {
 							logger.error(`could not install ${app.id}`, { error })
+							app.isSelected = false
 							app.installationError = true
 						})
 						.then(() => {
 							logger.info(`installed ${app.id}`)
 							app.loading = false
+							app.active = true
 						})
 				}))
 			logger.debug(`installing ${installing.length} recommended apps`)
@@ -153,7 +165,7 @@ export default {
 				.then(() => {
 					logger.info('all recommended apps installed, redirecting …')
 
-					window.location = defaultPageUrl
+					window.location = this.defaultPageUrl
 				})
 				.catch(error => logger.error('could not install recommended apps', { error }))
 		},
@@ -164,6 +176,12 @@ export default {
 			}
 			return recommended[appId].icon
 		},
+		customName(app) {
+			if (!(app.id in recommended)) {
+				return app.name
+			}
+			return recommended[app.id].name || app.name
+		},
 		customDescription(appId) {
 			if (!(appId in recommended)) {
 				logger.warn(`no app description for recommended app ${appId}`)
@@ -171,17 +189,40 @@ export default {
 			}
 			return recommended[appId].description
 		},
+		isHidden(appId) {
+			if (!(appId in recommended)) {
+				return false
+			}
+			return !!recommended[appId].hidden
+		},
+		toggleSelect(appId) {
+			// disable toggle when installButton is disabled
+			if (!(appId in recommended) || !this.showInstallButton) {
+				return
+			}
+			const index = this.apps.findIndex(app => app.id === appId)
+			this.$set(this.apps[index], 'isSelected', !this.apps[index].isSelected)
+		},
 	},
 }
 </script>
 
 <style lang="scss" scoped>
-.body-login-container {
-
+.dialog-row {
+	display: flex;
+	justify-content: end;
+	margin-top: 8px;
 }
 
-p.loading, p.loading-error {
-	height: 100px;
+p {
+	&.loading,
+	&.loading-error {
+		height: 100px;
+	}
+
+	&:last-child {
+		margin-top: 10px;
+	}
 }
 
 .text-center {
@@ -195,7 +236,7 @@ p.loading, p.loading-error {
 	img {
 		height: 50px;
 		width: 50px;
-		filter: invert(1);
+		filter: var(--background-invert-if-dark);
 	}
 
 	img, .info {
@@ -204,17 +245,17 @@ p.loading, p.loading-error {
 
 	.info {
 		h3, p {
-			text-align: left;
+			text-align: start;
 		}
 
 		h3 {
-			color: #fff;
 			margin-top: 0;
 		}
+	}
 
-		h3 > span.icon {
-			display: inline-block;
-		}
+	.checkbox-radio-switch {
+		margin-inline-start: auto;
+		padding: 0 2px;
 	}
 }
 </style>

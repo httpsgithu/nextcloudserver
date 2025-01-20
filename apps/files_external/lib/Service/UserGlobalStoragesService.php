@@ -1,29 +1,13 @@
 <?php
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Robin Appelman <robin@icewind.nl>
- * @author Robin McCorkell <robin@mccorkell.me.uk>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 namespace OCA\Files_External\Service;
 
 use OCA\Files_External\Lib\StorageConfig;
+use OCP\EventDispatcher\IEventDispatcher;
 use OCP\Files\Config\IUserMountCache;
 use OCP\IGroupManager;
 use OCP\IUser;
@@ -36,26 +20,24 @@ use OCP\IUserSession;
 class UserGlobalStoragesService extends GlobalStoragesService {
 	use UserTrait;
 
-	/** @var IGroupManager */
-	protected $groupManager;
-
 	/**
 	 * @param BackendService $backendService
 	 * @param DBConfigService $dbConfig
 	 * @param IUserSession $userSession
 	 * @param IGroupManager $groupManager
 	 * @param IUserMountCache $userMountCache
+	 * @param IEventDispatcher $eventDispatcher
 	 */
 	public function __construct(
 		BackendService $backendService,
 		DBConfigService $dbConfig,
 		IUserSession $userSession,
-		IGroupManager $groupManager,
-		IUserMountCache $userMountCache
+		protected IGroupManager $groupManager,
+		IUserMountCache $userMountCache,
+		IEventDispatcher $eventDispatcher,
 	) {
-		parent::__construct($backendService, $dbConfig, $userMountCache);
+		parent::__construct($backendService, $dbConfig, $userMountCache, $eventDispatcher);
 		$this->userSession = $userSession;
-		$this->groupManager = $groupManager;
 	}
 
 	/**
@@ -180,7 +162,7 @@ class UserGlobalStoragesService extends GlobalStoragesService {
 	 * @param IUser|null $user user to get the storages for, if not set the currently logged in user will be used
 	 * @return StorageConfig[] array of storage configs
 	 */
-	public function getAllStoragesForUser(IUser $user = null) {
+	public function getAllStoragesForUser(?IUser $user = null) {
 		if (is_null($user)) {
 			$user = $this->getUser();
 		}

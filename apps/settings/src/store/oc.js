@@ -1,27 +1,9 @@
 /**
- * @copyright Copyright (c) 2018 John Molakvoæ <skjnldsv@protonmail.com>
- *
- * @author John Molakvoæ <skjnldsv@protonmail.com>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2018 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-import api from './api'
+import api from './api.js'
 import { generateOcsUrl } from '@nextcloud/router'
 
 const state = {}
@@ -29,14 +11,14 @@ const mutations = {}
 const getters = {}
 const actions = {
 	/**
-     * Set application config in database
-     *
-	 * @param {Object} context store context
-     * @param {Object} options destructuring object
+	 * Set application config in database
+	 *
+	 * @param {object} context store context
+	 * @param {object} options destructuring object
 	 * @param {string} options.app Application name
 	 * @param {boolean} options.key Config key
 	 * @param {boolean} options.value Value to set
-	 * @returns{Promise}
+	 * @return {Promise}
 	 */
 	setAppConfig(context, { app, key, value }) {
 		return api.requireAdmin().then((response) => {

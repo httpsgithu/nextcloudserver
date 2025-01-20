@@ -1,3 +1,7 @@
+/*!
+ * SPDX-FileCopyrightText: 2018 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
 form fieldset {
 	display: flex !important;
 	flex-direction: column;
@@ -7,6 +11,7 @@ form fieldset > p {
 	position: relative;
 }
 
+#email,
 #password {
 	margin: 5px 0;
 	padding-right: 45px;
@@ -17,8 +22,10 @@ form fieldset > p {
 	min-width: 0; /* FF hack for to override default value */
 }
 
-input[type='submit'],
-input[type='submit'].icon-confirm {
+#password-input-form input[type='submit'],
+#email-input-form input[type='submit'],
+#email-input-form input[type='submit'].icon-confirm,
+#password-input-form input[type='submit'].icon-confirm {
 	position: absolute;
 	top: 0px;
 	right: -5px;

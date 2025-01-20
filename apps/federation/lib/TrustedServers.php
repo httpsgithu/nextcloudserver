@@ -1,29 +1,9 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
- * @author Bjoern Schiessle <bjoern@schiessle.org>
- * @author Björn Schießle <bjoern@schiessle.org>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 namespace OCA\Federation;
 
@@ -31,13 +11,14 @@ use OCA\Federation\BackgroundJob\RequestSharedSecret;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
+use OCP\DB\Exception;
+use OCP\EventDispatcher\IEventDispatcher;
+use OCP\Federation\Events\TrustedServerRemovedEvent;
 use OCP\HintException;
 use OCP\Http\Client\IClientService;
 use OCP\IConfig;
-use OCP\ILogger;
 use OCP\Security\ISecureRandom;
-use Symfony\Component\EventDispatcher\EventDispatcherInterface;
-use Symfony\Component\EventDispatcher\GenericEvent;
+use Psr\Log\LoggerInterface;
 
 class TrustedServers {
 
@@ -50,67 +31,25 @@ class TrustedServers {
 	/** remote server revoked access */
 	public const STATUS_ACCESS_REVOKED = 4;
 
-	/** @var  dbHandler */
-	private $dbHandler;
+	/** @var list<array{id: int, url: string, url_hash: string, shared_secret: ?string, status: int, sync_token: ?string}>|null */
+	private ?array $trustedServersCache = null;
 
-	/** @var  IClientService */
-	private $httpClientService;
-
-	/** @var ILogger */
-	private $logger;
-
-	/** @var IJobList */
-	private $jobList;
-
-	/** @var ISecureRandom */
-	private $secureRandom;
-
-	/** @var IConfig */
-	private $config;
-
-	/** @var EventDispatcherInterface */
-	private $dispatcher;
-
-	/** @var ITimeFactory */
-	private $timeFactory;
-
-	/**
-	 * @param DbHandler $dbHandler
-	 * @param IClientService $httpClientService
-	 * @param ILogger $logger
-	 * @param IJobList $jobList
-	 * @param ISecureRandom $secureRandom
-	 * @param IConfig $config
-	 * @param EventDispatcherInterface $dispatcher
-	 * @param ITimeFactory $timeFactory
-	 */
 	public function __construct(
-		DbHandler $dbHandler,
-		IClientService $httpClientService,
-		ILogger $logger,
-		IJobList $jobList,
-		ISecureRandom $secureRandom,
-		IConfig $config,
-		EventDispatcherInterface $dispatcher,
-		ITimeFactory $timeFactory
+		private DbHandler $dbHandler,
+		private IClientService $httpClientService,
+		private LoggerInterface $logger,
+		private IJobList $jobList,
+		private ISecureRandom $secureRandom,
+		private IConfig $config,
+		private IEventDispatcher $dispatcher,
+		private ITimeFactory $timeFactory,
 	) {
-		$this->dbHandler = $dbHandler;
-		$this->httpClientService = $httpClientService;
-		$this->logger = $logger;
-		$this->jobList = $jobList;
-		$this->secureRandom = $secureRandom;
-		$this->config = $config;
-		$this->dispatcher = $dispatcher;
-		$this->timeFactory = $timeFactory;
 	}
 
 	/**
-	 * add server to the list of trusted servers
-	 *
-	 * @param $url
-	 * @return int server id
+	 * Add server to the list of trusted servers
 	 */
-	public function addServer($url) {
+	public function addServer(string $url): int {
 		$url = $this->updateProtocol($url);
 		$result = $this->dbHandler->addServer($url);
 		if ($result) {
@@ -130,82 +69,87 @@ class TrustedServers {
 	}
 
 	/**
-	 * get shared secret for the given server
-	 *
-	 * @param string $url
-	 * @return string
+	 * Get shared secret for the given server
 	 */
-	public function getSharedSecret($url) {
+	public function getSharedSecret(string $url): string {
 		return $this->dbHandler->getSharedSecret($url);
 	}
 
 	/**
-	 * add shared secret for the given server
-	 *
-	 * @param string $url
-	 * @param $sharedSecret
+	 * Add shared secret for the given server
 	 */
-	public function addSharedSecret($url, $sharedSecret) {
+	public function addSharedSecret(string $url, string $sharedSecret): void {
 		$this->dbHandler->addSharedSecret($url, $sharedSecret);
 	}
 
 	/**
-	 * remove server from the list of trusted servers
-	 *
-	 * @param int $id
+	 * Remove server from the list of trusted servers
 	 */
-	public function removeServer($id) {
+	public function removeServer(int $id): void {
 		$server = $this->dbHandler->getServerById($id);
 		$this->dbHandler->removeServer($id);
-		$event = new GenericEvent($server['url_hash']);
-		$this->dispatcher->dispatch('OCP\Federation\TrustedServerEvent::remove', $event);
+		$this->dispatcher->dispatchTyped(new TrustedServerRemovedEvent($server['url_hash']));
+
 	}
 
 	/**
-	 * get all trusted servers
+	 * Get all trusted servers
 	 *
-	 * @return array
+	 * @return list<array{id: int, url: string, url_hash: string, shared_secret: ?string, status: int, sync_token: ?string}>
+	 * @throws \Exception
 	 */
-	public function getServers() {
-		return $this->dbHandler->getAllServer();
+	public function getServers(): ?array {
+		if ($this->trustedServersCache === null) {
+			$this->trustedServersCache = $this->dbHandler->getAllServer();
+		}
+		return $this->trustedServersCache;
 	}
 
 	/**
-	 * check if given server is a trusted Nextcloud server
+	 * Get a trusted server
 	 *
-	 * @param string $url
-	 * @return bool
+	 * @return array{id: int, url: string, url_hash: string, shared_secret: ?string, status: int, sync_token: ?string}
+	 * @throws Exception
 	 */
-	public function isTrustedServer($url) {
+	public function getServer(int $id): ?array {
+		if ($this->trustedServersCache === null) {
+			$this->trustedServersCache = $this->dbHandler->getAllServer();
+		}
+
+		$server = array_filter($this->trustedServersCache, fn ($server) => $server['id'] === $id);
+		if (empty($server)) {
+			throw new \Exception('No server found with ID: ' . $id);
+		}
+
+		return $server[0];
+	}
+
+	/**
+	 * Check if given server is a trusted Nextcloud server
+	 */
+	public function isTrustedServer(string $url): bool {
 		return $this->dbHandler->serverExists($url);
 	}
 
 	/**
-	 * set server status
-	 *
-	 * @param string $url
-	 * @param int $status
+	 * Set server status
 	 */
-	public function setServerStatus($url, $status) {
+	public function setServerStatus(string $url, int $status): void {
 		$this->dbHandler->setServerStatus($url, $status);
 	}
 
 	/**
-	 * @param string $url
-	 * @return int
+	 * Get server status
 	 */
-	public function getServerStatus($url) {
+	public function getServerStatus(string $url): int {
 		return $this->dbHandler->getServerStatus($url);
 	}
 
 	/**
-	 * check if URL point to a ownCloud/Nextcloud server
-	 *
-	 * @param string $url
-	 * @return bool
+	 * Check if URL point to a ownCloud/Nextcloud server
 	 */
-	public function isOwnCloudServer($url) {
-		$isValidOwnCloud = false;
+	public function isNextcloudServer(string $url): bool {
+		$isValidNextcloud = false;
 		$client = $this->httpClientService->newClient();
 		try {
 			$result = $client->get(
@@ -213,31 +157,32 @@ class TrustedServers {
 				[
 					'timeout' => 3,
 					'connect_timeout' => 3,
+					'verify' => !$this->config->getSystemValue('sharing.federation.allowSelfSignedCertificates', false),
 				]
 			);
 			if ($result->getStatusCode() === Http::STATUS_OK) {
-				$isValidOwnCloud = $this->checkOwnCloudVersion($result->getBody());
+				$body = $result->getBody();
+				if (is_resource($body)) {
+					$body = stream_get_contents($body) ?: '';
+				}
+				$isValidNextcloud = $this->checkNextcloudVersion($body);
 			}
 		} catch (\Exception $e) {
-			\OC::$server->getLogger()->logException($e, [
-				'message' => 'No Nextcloud server.',
-				'level' => ILogger::DEBUG,
+			$this->logger->error('No Nextcloud server.', [
 				'app' => 'federation',
+				'exception' => $e,
 			]);
 			return false;
 		}
 
-		return $isValidOwnCloud;
+		return $isValidNextcloud;
 	}
 
 	/**
-	 * check if ownCloud version is >= 9.0
-	 *
-	 * @param $status
-	 * @return bool
+	 * Check if ownCloud/Nextcloud version is >= 9.0
 	 * @throws HintException
 	 */
-	protected function checkOwnCloudVersion($status) {
+	protected function checkNextcloudVersion(string $status): bool {
 		$decoded = json_decode($status, true);
 		if (!empty($decoded) && isset($decoded['version'])) {
 			if (!version_compare($decoded['version'], '9.0.0', '>=')) {
@@ -249,12 +194,9 @@ class TrustedServers {
 	}
 
 	/**
-	 * check if the URL contain a protocol, if not add https
-	 *
-	 * @param string $url
-	 * @return string
+	 * Check if the URL contain a protocol, if not add https
 	 */
-	protected function updateProtocol($url) {
+	protected function updateProtocol(string $url): string {
 		if (
 			strpos($url, 'https://') === 0
 			|| strpos($url, 'http://') === 0

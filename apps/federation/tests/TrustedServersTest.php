@@ -1,29 +1,9 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Bjoern Schiessle <bjoern@schiessle.org>
- * @author Björn Schießle <bjoern@schiessle.org>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 namespace OCA\Federation\Tests;
 
@@ -31,45 +11,46 @@ use OCA\Federation\DbHandler;
 use OCA\Federation\TrustedServers;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
+use OCP\EventDispatcher\IEventDispatcher;
+use OCP\Federation\Events\TrustedServerRemovedEvent;
+use OCP\HintException;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
 use OCP\IConfig;
-use OCP\ILogger;
 use OCP\Security\ISecureRandom;
-use Symfony\Component\EventDispatcher\EventDispatcherInterface;
+use Psr\Log\LoggerInterface;
 use Test\TestCase;
 
 class TrustedServersTest extends TestCase {
-
 	/** @var \PHPUnit\Framework\MockObject\MockObject | TrustedServers */
 	private $trustedServers;
 
-	/** @var  \PHPUnit\Framework\MockObject\MockObject | DbHandler */
+	/** @var \PHPUnit\Framework\MockObject\MockObject | DbHandler */
 	private $dbHandler;
 
 	/** @var \PHPUnit\Framework\MockObject\MockObject | IClientService */
 	private $httpClientService;
 
-	/** @var  \PHPUnit\Framework\MockObject\MockObject | IClient */
+	/** @var \PHPUnit\Framework\MockObject\MockObject | IClient */
 	private $httpClient;
 
-	/** @var  \PHPUnit\Framework\MockObject\MockObject | IResponse */
+	/** @var \PHPUnit\Framework\MockObject\MockObject | IResponse */
 	private $response;
 
-	/** @var  \PHPUnit\Framework\MockObject\MockObject | ILogger */
+	/** @var \PHPUnit\Framework\MockObject\MockObject | LoggerInterface */
 	private $logger;
 
-	/** @var  \PHPUnit\Framework\MockObject\MockObject | IJobList */
+	/** @var \PHPUnit\Framework\MockObject\MockObject | IJobList */
 	private $jobList;
 
-	/** @var  \PHPUnit\Framework\MockObject\MockObject | ISecureRandom */
+	/** @var \PHPUnit\Framework\MockObject\MockObject | ISecureRandom */
 	private $secureRandom;
 
-	/** @var  \PHPUnit\Framework\MockObject\MockObject | IConfig */
+	/** @var \PHPUnit\Framework\MockObject\MockObject | IConfig */
 	private $config;
 
-	/** @var  \PHPUnit\Framework\MockObject\MockObject | EventDispatcherInterface */
+	/** @var \PHPUnit\Framework\MockObject\MockObject | IEventDispatcher */
 	private $dispatcher;
 
 	/** @var \PHPUnit\Framework\MockObject\MockObject|ITimeFactory */
@@ -80,12 +61,12 @@ class TrustedServersTest extends TestCase {
 
 		$this->dbHandler = $this->getMockBuilder(DbHandler::class)
 			->disableOriginalConstructor()->getMock();
-		$this->dispatcher = $this->getMockBuilder(EventDispatcherInterface::class)
+		$this->dispatcher = $this->getMockBuilder(IEventDispatcher::class)
 			->disableOriginalConstructor()->getMock();
 		$this->httpClientService = $this->getMockBuilder(IClientService::class)->getMock();
 		$this->httpClient = $this->getMockBuilder(IClient::class)->getMock();
 		$this->response = $this->getMockBuilder(IResponse::class)->getMock();
-		$this->logger = $this->getMockBuilder(ILogger::class)->getMock();
+		$this->logger = $this->getMockBuilder(LoggerInterface::class)->getMock();
 		$this->jobList = $this->getMockBuilder(IJobList::class)->getMock();
 		$this->secureRandom = $this->getMockBuilder(ISecureRandom::class)->getMock();
 		$this->config = $this->getMockBuilder(IConfig::class)->getMock();
@@ -103,12 +84,7 @@ class TrustedServersTest extends TestCase {
 		);
 	}
 
-	/**
-	 * @dataProvider dataTrueFalse
-	 *
-	 * @param bool $success
-	 */
-	public function testAddServer($success) {
+	public function testAddServer(): void {
 		/** @var \PHPUnit\Framework\MockObject\MockObject|TrustedServers $trustedServers */
 		$trustedServers = $this->getMockBuilder('OCA\Federation\TrustedServers')
 			->setConstructorArgs(
@@ -126,68 +102,60 @@ class TrustedServersTest extends TestCase {
 			->setMethods(['normalizeUrl', 'updateProtocol'])
 			->getMock();
 		$trustedServers->expects($this->once())->method('updateProtocol')
-				->with('url')->willReturn('https://url');
+			->with('url')->willReturn('https://url');
 		$this->timeFactory->method('getTime')
 			->willReturn(1234567);
 		$this->dbHandler->expects($this->once())->method('addServer')->with('https://url')
-			->willReturn($success);
+			->willReturn(1);
 
-		if ($success) {
-			$this->secureRandom->expects($this->once())->method('generate')
-				->willReturn('token');
-			$this->dbHandler->expects($this->once())->method('addToken')->with('https://url', 'token');
-			$this->jobList->expects($this->once())->method('add')
-				->with('OCA\Federation\BackgroundJob\RequestSharedSecret',
-						['url' => 'https://url', 'token' => 'token', 'created' => 1234567]);
-		} else {
-			$this->jobList->expects($this->never())->method('add');
-		}
+		$this->secureRandom->expects($this->once())->method('generate')
+			->willReturn('token');
+		$this->dbHandler->expects($this->once())->method('addToken')->with('https://url', 'token');
+		$this->jobList->expects($this->once())->method('add')
+			->with('OCA\Federation\BackgroundJob\RequestSharedSecret',
+				['url' => 'https://url', 'token' => 'token', 'created' => 1234567]);
 
-		$this->assertSame($success,
-			$trustedServers->addServer('url')
+		$this->assertSame(
+			$trustedServers->addServer('url'),
+			1
 		);
 	}
 
-	public function dataTrueFalse() {
-		return [
-			[true],
-			[false]
-		];
-	}
-
-	public function testAddSharedSecret() {
+	public function testAddSharedSecret(): void {
 		$this->dbHandler->expects($this->once())->method('addSharedSecret')
 			->with('url', 'secret');
 		$this->trustedServers->addSharedSecret('url', 'secret');
 	}
 
-	public function testGetSharedSecret() {
-		$this->dbHandler->expects($this->once())->method('getSharedSecret')
-			->with('url')->willReturn(true);
-		$this->assertTrue(
-			$this->trustedServers->getSharedSecret('url')
+	public function testGetSharedSecret(): void {
+		$this->dbHandler->expects($this->once())
+			->method('getSharedSecret')
+			->with('url')
+			->willReturn('secret');
+		$this->assertSame(
+			$this->trustedServers->getSharedSecret('url'),
+			'secret'
 		);
 	}
 
-	public function testRemoveServer() {
+	public function testRemoveServer(): void {
 		$id = 42;
 		$server = ['url_hash' => 'url_hash'];
 		$this->dbHandler->expects($this->once())->method('removeServer')->with($id);
 		$this->dbHandler->expects($this->once())->method('getServerById')->with($id)
 			->willReturn($server);
-		$this->dispatcher->expects($this->once())->method('dispatch')
+		$this->dispatcher->expects($this->once())->method('dispatchTyped')
 			->willReturnCallback(
-				function ($eventId, $event) {
-					$this->assertSame($eventId, 'OCP\Federation\TrustedServerEvent::remove');
-					$this->assertInstanceOf('Symfony\Component\EventDispatcher\GenericEvent', $event);
-					/** @var \Symfony\Component\EventDispatcher\GenericEvent $event */
-					$this->assertSame('url_hash', $event->getSubject());
+				function ($event): void {
+					$this->assertSame(get_class($event), TrustedServerRemovedEvent::class);
+					/** @var \OCP\Federated\Events\TrustedServerRemovedEvent $event */
+					$this->assertSame('url_hash', $event->getUrlHash());
 				}
 			);
 		$this->trustedServers->removeServer($id);
 	}
 
-	public function testGetServers() {
+	public function testGetServers(): void {
 		$this->dbHandler->expects($this->once())->method('getAllServer')->willReturn(['servers']);
 
 		$this->assertEquals(
@@ -197,8 +165,9 @@ class TrustedServersTest extends TestCase {
 	}
 
 
-	public function testIsTrustedServer() {
-		$this->dbHandler->expects($this->once())->method('serverExists')->with('url')
+	public function testIsTrustedServer(): void {
+		$this->dbHandler->expects($this->once())
+			->method('serverExists')->with('url')
 			->willReturn(true);
 
 		$this->assertTrue(
@@ -206,28 +175,25 @@ class TrustedServersTest extends TestCase {
 		);
 	}
 
-	public function testSetServerStatus() {
+	public function testSetServerStatus(): void {
 		$this->dbHandler->expects($this->once())->method('setServerStatus')
-			->with('url', 'status');
-		$this->trustedServers->setServerStatus('url', 'status');
+			->with('url', 1);
+		$this->trustedServers->setServerStatus('url', 1);
 	}
 
-	public function testGetServerStatus() {
+	public function testGetServerStatus(): void {
 		$this->dbHandler->expects($this->once())->method('getServerStatus')
-			->with('url')->willReturn(true);
-		$this->assertTrue(
-			$this->trustedServers->getServerStatus('url')
+			->with('url')->willReturn(1);
+		$this->assertSame(
+			$this->trustedServers->getServerStatus('url'),
+			1
 		);
 	}
 
 	/**
-	 * @dataProvider dataTestIsOwnCloudServer
-	 *
-	 * @param int $statusCode
-	 * @param bool $isValidOwnCloudVersion
-	 * @param bool $expected
+	 * @dataProvider dataTestIsNextcloudServer
 	 */
-	public function testIsOwnCloudServer($statusCode, $isValidOwnCloudVersion, $expected) {
+	public function testIsNextcloudServer(int $statusCode, bool $isValidNextcloudVersion, bool $expected): void {
 		$server = 'server1';
 
 		/** @var \PHPUnit\Framework\MockObject\MockObject | TrustedServers $trustedServers */
@@ -244,7 +210,7 @@ class TrustedServersTest extends TestCase {
 					$this->timeFactory
 				]
 			)
-			->setMethods(['checkOwnCloudVersion'])
+			->setMethods(['checkNextcloudVersion'])
 			->getMock();
 
 		$this->httpClientService->expects($this->once())->method('newClient')
@@ -257,18 +223,20 @@ class TrustedServersTest extends TestCase {
 			->willReturn($statusCode);
 
 		if ($statusCode === 200) {
-			$trustedServers->expects($this->once())->method('checkOwnCloudVersion')
-				->willReturn($isValidOwnCloudVersion);
+			$this->response->expects($this->once())->method('getBody')
+				->willReturn('');
+			$trustedServers->expects($this->once())->method('checkNextcloudVersion')
+				->willReturn($isValidNextcloudVersion);
 		} else {
-			$trustedServers->expects($this->never())->method('checkOwnCloudVersion');
+			$trustedServers->expects($this->never())->method('checkNextcloudVersion');
 		}
 
 		$this->assertSame($expected,
-			$trustedServers->isOwnCloudServer($server)
+			$trustedServers->isNextcloudServer($server)
 		);
 	}
 
-	public function dataTestIsOwnCloudServer() {
+	public function dataTestIsNextcloudServer(): array {
 		return [
 			[200, true, true],
 			[200, false, false],
@@ -279,28 +247,28 @@ class TrustedServersTest extends TestCase {
 	/**
 	 * @expectedExceptionMessage simulated exception
 	 */
-	public function testIsOwnCloudServerFail() {
+	public function testIsNextcloudServerFail(): void {
 		$server = 'server1';
 
 		$this->httpClientService->expects($this->once())->method('newClient')
 			->willReturn($this->httpClient);
 
 		$this->httpClient->expects($this->once())->method('get')->with($server . '/status.php')
-			->willReturnCallback(function () {
+			->willReturnCallback(function (): void {
 				throw new \Exception('simulated exception');
 			});
 
-		$this->assertFalse($this->trustedServers->isOwnCloudServer($server));
+		$this->assertFalse($this->trustedServers->isNextcloudServer($server));
 	}
 
 	/**
-	 * @dataProvider dataTestCheckOwnCloudVersion
+	 * @dataProvider dataTestCheckNextcloudVersion
 	 */
-	public function testCheckOwnCloudVersion($status) {
-		$this->assertTrue($this->invokePrivate($this->trustedServers, 'checkOwnCloudVersion', [$status]));
+	public function testCheckNextcloudVersion($status): void {
+		$this->assertTrue($this->invokePrivate($this->trustedServers, 'checkNextcloudVersion', [$status]));
 	}
 
-	public function dataTestCheckOwnCloudVersion() {
+	public function dataTestCheckNextcloudVersion(): array {
 		return [
 			['{"version":"9.0.0"}'],
 			['{"version":"9.1.0"}']
@@ -308,16 +276,16 @@ class TrustedServersTest extends TestCase {
 	}
 
 	/**
-	 * @dataProvider dataTestCheckOwnCloudVersionTooLow
+	 * @dataProvider dataTestCheckNextcloudVersionTooLow
 	 */
-	public function testCheckOwnCloudVersionTooLow($status) {
-		$this->expectException(\OCP\HintException::class);
+	public function testCheckNextcloudVersionTooLow(string $status): void {
+		$this->expectException(HintException::class);
 		$this->expectExceptionMessage('Remote server version is too low. 9.0 is required.');
 
-		$this->invokePrivate($this->trustedServers, 'checkOwnCloudVersion', [$status]);
+		$this->invokePrivate($this->trustedServers, 'checkNextcloudVersion', [$status]);
 	}
 
-	public function dataTestCheckOwnCloudVersionTooLow() {
+	public function dataTestCheckNextcloudVersionTooLow(): array {
 		return [
 			['{"version":"8.2.3"}'],
 		];
@@ -325,16 +293,14 @@ class TrustedServersTest extends TestCase {
 
 	/**
 	 * @dataProvider dataTestUpdateProtocol
-	 * @param string $url
-	 * @param string $expected
 	 */
-	public function testUpdateProtocol($url, $expected) {
+	public function testUpdateProtocol(string $url, string $expected): void {
 		$this->assertSame($expected,
 			$this->invokePrivate($this->trustedServers, 'updateProtocol', [$url])
 		);
 	}
 
-	public function dataTestUpdateProtocol() {
+	public function dataTestUpdateProtocol(): array {
 		return [
 			['http://owncloud.org', 'http://owncloud.org'],
 			['https://owncloud.org', 'https://owncloud.org'],

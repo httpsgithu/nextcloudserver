@@ -1,11 +1,7 @@
-/*
- * Copyright (c) 2014
- *
- * This file is licensed under the Affero General Public License version 3
- * or later.
- *
- * See the COPYING-README file.
- *
+/**
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2014 ownCloud Inc.
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 (function() {
@@ -92,7 +88,7 @@
 
 				if (hasWarnings) {
 					$el.find('.update-show-detailed').before(
-						$('<input type="button" class="update-continue" value="'+t('core', 'Continue to {productName}', OC.Update.options)+'">').on('click', function() {
+						$('<input type="button" class="primary" value="'+t('core', 'Continue to {productName}', OC.Update.options)+'">').on('click', function() {
 							window.location.reload();
 						})
 					);
@@ -160,6 +156,7 @@ window.addEventListener('DOMContentLoaded', function() {
 		});
 		return false;
 	});
+
 	$('.update-show-detailed').on('click', function() {
 		$('#update-progress-detailed').toggleClass('hidden');
 		return false;

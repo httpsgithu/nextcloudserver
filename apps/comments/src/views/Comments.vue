@@ -1,51 +1,44 @@
 <!--
-  - @copyright Copyright (c) 2020 John Molakvoæ <skjnldsv@protonmail.com>
-  -
-  - @author John Molakvoæ <skjnldsv@protonmail.com>
-  -
-  - @license GNU AGPL version 3 or any later version
-  -
-  - This program is free software: you can redistribute it and/or modify
-  - it under the terms of the GNU Affero General Public License as
-  - published by the Free Software Foundation, either version 3 of the
-  - License, or (at your option) any later version.
-  -
-  - This program is distributed in the hope that it will be useful,
-  - but WITHOUT ANY WARRANTY; without even the implied warranty of
-  - MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  - GNU Affero General Public License for more details.
-  -
-  - You should have received a copy of the GNU Affero General Public License
-  - along with this program. If not, see <http://www.gnu.org/licenses/>.
-  -
-  -->
+  - SPDX-FileCopyrightText: 2020 Nextcloud GmbH and Nextcloud contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
+-->
 
 <template>
-	<div class="comments" :class="{ 'icon-loading': isFirstLoading }">
+	<div v-element-visibility="onVisibilityChange"
+		class="comments"
+		:class="{ 'icon-loading': isFirstLoading }">
 		<!-- Editor -->
 		<Comment v-bind="editorData"
 			:auto-complete="autoComplete"
+			:resource-type="resourceType"
 			:editor="true"
-			:ressource-id="ressourceId"
+			:user-data="userData"
+			:resource-id="currentResourceId"
 			class="comments__writer"
 			@new="onNewComment" />
 
 		<template v-if="!isFirstLoading">
-			<EmptyContent v-if="!hasComments && done" icon="icon-comment">
-				{{ t('comments', 'No comments yet, start the conversation!') }}
-			</EmptyContent>
-
-			<!-- Comments -->
-			<Comment v-for="comment in comments"
-				v-else
-				:key="comment.props.id"
-				v-bind="comment.props"
-				:auto-complete="autoComplete"
-				:message.sync="comment.props.message"
-				:ressource-id="ressourceId"
-				:user-data="genMentionsData(comment.props.mentions)"
-				class="comments__list"
-				@delete="onDelete" />
+			<NcEmptyContent v-if="!hasComments && done"
+				class="comments__empty"
+				:name="t('comments', 'No comments yet, start the conversation!')">
+				<template #icon>
+					<MessageReplyTextIcon />
+				</template>
+			</NcEmptyContent>
+			<ul v-else>
+				<!-- Comments -->
+				<Comment v-for="comment in comments"
+					:key="comment.props.id"
+					tag="li"
+					v-bind="comment.props"
+					:auto-complete="autoComplete"
+					:resource-type="resourceType"
+					:message.sync="comment.props.message"
+					:resource-id="currentResourceId"
+					:user-data="genMentionsData(comment.props.mentions)"
+					class="comments__list"
+					@delete="onDelete" />
+			</ul>
 
 			<!-- Loading more message -->
 			<div v-if="loading && !isFirstLoading" class="comments__info icon-loading" />
@@ -55,42 +48,57 @@
 			</div>
 
 			<!-- Error message -->
-			<EmptyContent v-else-if="error" class="comments__error" icon="icon-error">
-				{{ error }}
-				<template #desc>
-					<button icon="icon-history" @click="getComments">
-						{{ t('comments', 'Retry') }}
-					</button>
-				</template>
-			</EmptyContent>
+			<template v-else-if="error">
+				<NcEmptyContent class="comments__error" :name="error">
+					<template #icon>
+						<AlertCircleOutlineIcon />
+					</template>
+				</NcEmptyContent>
+				<NcButton class="comments__retry" @click="getComments">
+					<template #icon>
+						<RefreshIcon />
+					</template>
+					{{ t('comments', 'Retry') }}
+				</NcButton>
+			</template>
 		</template>
 	</div>
 </template>
 
 <script>
-import { generateOcsUrl } from '@nextcloud/router'
-import { getCurrentUser } from '@nextcloud/auth'
-import { loadState } from '@nextcloud/initial-state'
-import axios from '@nextcloud/axios'
-import VTooltip from 'v-tooltip'
-import Vue from 'vue'
+import { showError } from '@nextcloud/dialogs'
+import { translate as t } from '@nextcloud/l10n'
+import { vElementVisibility as elementVisibility } from '@vueuse/components'
 
-import EmptyContent from '@nextcloud/vue/dist/Components/EmptyContent'
+import NcEmptyContent from '@nextcloud/vue/dist/Components/NcEmptyContent.js'
+import NcButton from '@nextcloud/vue/dist/Components/NcButton.js'
+import RefreshIcon from 'vue-material-design-icons/Refresh.vue'
+import MessageReplyTextIcon from 'vue-material-design-icons/MessageReplyText.vue'
+import AlertCircleOutlineIcon from 'vue-material-design-icons/AlertCircleOutline.vue'
 
-import Comment from '../components/Comment'
-import getComments, { DEFAULT_LIMIT } from '../services/GetComments'
-import cancelableRequest from '../utils/cancelableRequest'
-
-Vue.use(VTooltip)
+import Comment from '../components/Comment.vue'
+import CommentView from '../mixins/CommentView'
+import cancelableRequest from '../utils/cancelableRequest.js'
+import { getComments, DEFAULT_LIMIT } from '../services/GetComments.ts'
+import { markCommentsAsRead } from '../services/ReadComments.ts'
 
 export default {
 	name: 'Comments',
 
 	components: {
-		// Avatar,
 		Comment,
-		EmptyContent,
+		NcEmptyContent,
+		NcButton,
+		RefreshIcon,
+		MessageReplyTextIcon,
+		AlertCircleOutlineIcon,
 	},
+
+	directives: {
+		elementVisibility,
+	},
+
+	mixins: [CommentView],
 
 	data() {
 		return {
@@ -98,19 +106,14 @@ export default {
 			loading: false,
 			done: false,
 
-			ressourceId: null,
+			currentResourceId: this.resourceId,
 			offset: 0,
 			comments: [],
 
 			cancelRequest: () => {},
 
-			editorData: {
-				actorDisplayName: getCurrentUser().displayName,
-				actorId: getCurrentUser().uid,
-				key: 'editor',
-			},
-
 			Comment,
+			userData: {},
 		}
 	},
 
@@ -123,13 +126,32 @@ export default {
 		},
 	},
 
+	watch: {
+		resourceId() {
+			this.currentResourceId = this.resourceId
+		},
+	},
+
 	methods: {
+		t,
+
+		async onVisibilityChange(isVisible) {
+			if (isVisible) {
+				try {
+					await markCommentsAsRead(this.resourceType, this.currentResourceId, new Date())
+				} catch (e) {
+					showError(e.message || t('comments', 'Failed to mark comments as read'))
+				}
+			}
+		},
+
 		/**
-		 * Update current ressourceId and fetch new data
-		 * @param {Number} ressourceId the current ressourceId (fileId...)
+		 * Update current resourceId and fetch new data
+		 *
+		 * @param {number} resourceId the current resourceId (fileId...)
 		 */
-		async update(ressourceId) {
-			this.ressourceId = ressourceId
+		async update(resourceId) {
+			this.currentResourceId = resourceId
 			this.resetState()
 			this.getComments()
 		},
@@ -151,26 +173,6 @@ export default {
 		},
 
 		/**
-		 * Make sure we have all mentions as Array of objects
-		 * @param {Array} mentions the mentions list
-		 * @returns {Object[]}
-		 */
-		genMentionsData(mentions) {
-			const list = Object.values(mentions).flat()
-			return list.reduce((mentions, mention) => {
-				mentions[mention.mentionId] = {
-					// TODO: support groups
-					icon: 'icon-user',
-					id: mention.mentionId,
-					label: mention.mentionDisplayName,
-					source: 'users',
-					primary: getCurrentUser().uid === mention.mentionId,
-				}
-				return mentions
-			}, {})
-		},
-
-		/**
 		 * Get the existing shares infos
 		 */
 		async getComments() {
@@ -182,14 +184,14 @@ export default {
 				this.error = ''
 
 				// Init cancellable request
-				const { request, cancel } = cancelableRequest(getComments)
-				this.cancelRequest = cancel
+				const { request, abort } = cancelableRequest(getComments)
+				this.cancelRequest = abort
 
 				// Fetch comments
-				const comments = await request({
-					commentsType: this.commentsType,
-					ressourceId: this.ressourceId,
-				}, { offset: this.offset })
+				const { data: comments } = await request({
+					resourceType: this.resourceType,
+					resourceId: this.currentResourceId,
+				}, { offset: this.offset }) || { data: [] }
 
 				this.logger.debug(`Processed ${comments.length} comments`, { comments })
 
@@ -216,26 +218,9 @@ export default {
 		},
 
 		/**
-		 * Autocomplete @mentions
-		 * @param {string} search the query
-		 * @param {Function} callback the callback to process the results with
-		 */
-		async autoComplete(search, callback) {
-			const results = await axios.get(generateOcsUrl('core/autocomplete/get'), {
-				params: {
-					search,
-					itemType: 'files',
-					itemId: this.ressourceId,
-					sorter: 'commenters|share-recipients',
-					limit: loadState('comments', 'maxAutoCompleteResults'),
-				},
-			})
-			return callback(results.data.ocs.data)
-		},
-
-		/**
 		 * Add newly created comment to the list
-		 * @param {Object} comment the new comment
+		 *
+		 * @param {object} comment the new comment
 		 */
 		onNewComment(comment) {
 			this.comments.unshift(comment)
@@ -243,6 +228,7 @@ export default {
 
 		/**
 		 * Remove deleted comment from the list
+		 *
 		 * @param {number} id the deleted comment
 		 */
 		onDelete(id) {
@@ -270,9 +256,17 @@ export default {
 
 <style lang="scss" scoped>
 .comments {
-	// Do not add emptycontent top margin
-	&__error{
-		margin-top: 0;
+	min-height: 100%;
+	display: flex;
+	flex-direction: column;
+
+	&__empty,
+	&__error {
+		flex: 1 0;
+	}
+
+	&__retry {
+		margin: 0 auto;
 	}
 
 	&__info {

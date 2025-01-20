@@ -3,30 +3,10 @@
 declare(strict_types=1);
 
 /**
- * @copyright 2018, Georg Ehrke <oc.list@georgehrke.com>
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Georg Ehrke <oc.list@georgehrke.com>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2018 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OCA\DAV\Tests\Unit\DAV\Controller;
 
 use OCA\DAV\CalDAV\InvitationResponse\InvitationResponseServer;
@@ -42,7 +22,6 @@ use Sabre\VObject\ITip\Message;
 use Test\TestCase;
 
 class InvitationResponseControllerTest extends TestCase {
-
 	/** @var InvitationResponseController */
 	private $controller;
 
@@ -77,7 +56,17 @@ class InvitationResponseControllerTest extends TestCase {
 		);
 	}
 
-	public function testAccept() {
+	public function attendeeProvider(): array {
+		return [
+			'local attendee' => [false],
+			'external attendee' => [true]
+		];
+	}
+
+	/**
+	 * @dataProvider attendeeProvider
+	 */
+	public function testAccept(bool $isExternalAttendee): void {
 		$this->buildQueryExpects('TOKEN123', [
 			'id' => 0,
 			'uid' => 'this-is-the-events-uid',
@@ -110,21 +99,26 @@ EOF;
 		$called = false;
 		$this->responseServer->expects($this->once())
 			->method('handleITipMessage')
-			->willReturnCallback(function (Message $iTipMessage) use (&$called, $expected) {
+			->willReturnCallback(function (Message $iTipMessage) use (&$called, $isExternalAttendee, $expected): void {
 				$called = true;
 				$this->assertEquals('this-is-the-events-uid', $iTipMessage->uid);
 				$this->assertEquals('VEVENT', $iTipMessage->component);
 				$this->assertEquals('REPLY', $iTipMessage->method);
 				$this->assertEquals(null, $iTipMessage->sequence);
 				$this->assertEquals('mailto:attendee@foo.bar', $iTipMessage->sender);
-				$this->assertEquals('mailto:organizer@foo.bar', $iTipMessage->recipient);
+				if ($isExternalAttendee) {
+					$this->assertEquals('mailto:organizer@foo.bar', $iTipMessage->recipient);
+				} else {
+					$this->assertEquals('mailto:attendee@foo.bar', $iTipMessage->recipient);
+				}
 
 				$iTipMessage->scheduleStatus = '1.2;Message delivered locally';
 
 				$this->assertEquals($expected, $iTipMessage->message->serialize());
 			});
-
-
+		$this->responseServer->expects($this->once())
+			->method('isExternalAttendee')
+			->willReturn($isExternalAttendee);
 
 		$response = $this->controller->accept('TOKEN123');
 		$this->assertInstanceOf(TemplateResponse::class, $response);
@@ -133,7 +127,10 @@ EOF;
 		$this->assertTrue($called);
 	}
 
-	public function testAcceptSequence() {
+	/**
+	 * @dataProvider attendeeProvider
+	 */
+	public function testAcceptSequence(bool $isExternalAttendee): void {
 		$this->buildQueryExpects('TOKEN123', [
 			'id' => 0,
 			'uid' => 'this-is-the-events-uid',
@@ -166,21 +163,26 @@ EOF;
 		$called = false;
 		$this->responseServer->expects($this->once())
 			->method('handleITipMessage')
-			->willReturnCallback(function (Message $iTipMessage) use (&$called, $expected) {
+			->willReturnCallback(function (Message $iTipMessage) use (&$called, $isExternalAttendee, $expected): void {
 				$called = true;
 				$this->assertEquals('this-is-the-events-uid', $iTipMessage->uid);
 				$this->assertEquals('VEVENT', $iTipMessage->component);
 				$this->assertEquals('REPLY', $iTipMessage->method);
 				$this->assertEquals(1337, $iTipMessage->sequence);
 				$this->assertEquals('mailto:attendee@foo.bar', $iTipMessage->sender);
-				$this->assertEquals('mailto:organizer@foo.bar', $iTipMessage->recipient);
+				if ($isExternalAttendee) {
+					$this->assertEquals('mailto:organizer@foo.bar', $iTipMessage->recipient);
+				} else {
+					$this->assertEquals('mailto:attendee@foo.bar', $iTipMessage->recipient);
+				}
 
 				$iTipMessage->scheduleStatus = '1.2;Message delivered locally';
 
 				$this->assertEquals($expected, $iTipMessage->message->serialize());
 			});
-
-
+		$this->responseServer->expects($this->once())
+			->method('isExternalAttendee')
+			->willReturn($isExternalAttendee);
 
 		$response = $this->controller->accept('TOKEN123');
 		$this->assertInstanceOf(TemplateResponse::class, $response);
@@ -189,7 +191,10 @@ EOF;
 		$this->assertTrue($called);
 	}
 
-	public function testAcceptRecurrenceId() {
+	/**
+	 * @dataProvider attendeeProvider
+	 */
+	public function testAcceptRecurrenceId(bool $isExternalAttendee): void {
 		$this->buildQueryExpects('TOKEN123', [
 			'id' => 0,
 			'uid' => 'this-is-the-events-uid',
@@ -223,21 +228,26 @@ EOF;
 		$called = false;
 		$this->responseServer->expects($this->once())
 			->method('handleITipMessage')
-			->willReturnCallback(function (Message $iTipMessage) use (&$called, $expected) {
+			->willReturnCallback(function (Message $iTipMessage) use (&$called, $isExternalAttendee, $expected): void {
 				$called = true;
 				$this->assertEquals('this-is-the-events-uid', $iTipMessage->uid);
 				$this->assertEquals('VEVENT', $iTipMessage->component);
 				$this->assertEquals('REPLY', $iTipMessage->method);
 				$this->assertEquals(0, $iTipMessage->sequence);
 				$this->assertEquals('mailto:attendee@foo.bar', $iTipMessage->sender);
-				$this->assertEquals('mailto:organizer@foo.bar', $iTipMessage->recipient);
+				if ($isExternalAttendee) {
+					$this->assertEquals('mailto:organizer@foo.bar', $iTipMessage->recipient);
+				} else {
+					$this->assertEquals('mailto:attendee@foo.bar', $iTipMessage->recipient);
+				}
 
 				$iTipMessage->scheduleStatus = '1.2;Message delivered locally';
 
 				$this->assertEquals($expected, $iTipMessage->message->serialize());
 			});
-
-
+		$this->responseServer->expects($this->once())
+			->method('isExternalAttendee')
+			->willReturn($isExternalAttendee);
 
 		$response = $this->controller->accept('TOKEN123');
 		$this->assertInstanceOf(TemplateResponse::class, $response);
@@ -246,7 +256,7 @@ EOF;
 		$this->assertTrue($called);
 	}
 
-	public function testAcceptTokenNotFound() {
+	public function testAcceptTokenNotFound(): void {
 		$this->buildQueryExpects('TOKEN123', null, 1337);
 
 		$response = $this->controller->accept('TOKEN123');
@@ -255,7 +265,7 @@ EOF;
 		$this->assertEquals([], $response->getParams());
 	}
 
-	public function testAcceptExpiredToken() {
+	public function testAcceptExpiredToken(): void {
 		$this->buildQueryExpects('TOKEN123', [
 			'id' => 0,
 			'uid' => 'this-is-the-events-uid',
@@ -273,7 +283,10 @@ EOF;
 		$this->assertEquals([], $response->getParams());
 	}
 
-	public function testDecline() {
+	/**
+	 * @dataProvider attendeeProvider
+	 */
+	public function testDecline(bool $isExternalAttendee): void {
 		$this->buildQueryExpects('TOKEN123', [
 			'id' => 0,
 			'uid' => 'this-is-the-events-uid',
@@ -306,21 +319,26 @@ EOF;
 		$called = false;
 		$this->responseServer->expects($this->once())
 			->method('handleITipMessage')
-			->willReturnCallback(function (Message $iTipMessage) use (&$called, $expected) {
+			->willReturnCallback(function (Message $iTipMessage) use (&$called, $isExternalAttendee, $expected): void {
 				$called = true;
 				$this->assertEquals('this-is-the-events-uid', $iTipMessage->uid);
 				$this->assertEquals('VEVENT', $iTipMessage->component);
 				$this->assertEquals('REPLY', $iTipMessage->method);
 				$this->assertEquals(null, $iTipMessage->sequence);
 				$this->assertEquals('mailto:attendee@foo.bar', $iTipMessage->sender);
-				$this->assertEquals('mailto:organizer@foo.bar', $iTipMessage->recipient);
+				if ($isExternalAttendee) {
+					$this->assertEquals('mailto:organizer@foo.bar', $iTipMessage->recipient);
+				} else {
+					$this->assertEquals('mailto:attendee@foo.bar', $iTipMessage->recipient);
+				}
 
 				$iTipMessage->scheduleStatus = '1.2;Message delivered locally';
 
 				$this->assertEquals($expected, $iTipMessage->message->serialize());
 			});
-
-
+		$this->responseServer->expects($this->once())
+			->method('isExternalAttendee')
+			->willReturn($isExternalAttendee);
 
 		$response = $this->controller->decline('TOKEN123');
 		$this->assertInstanceOf(TemplateResponse::class, $response);
@@ -329,26 +347,21 @@ EOF;
 		$this->assertTrue($called);
 	}
 
-	public function testOptions() {
+	public function testOptions(): void {
 		$response = $this->controller->options('TOKEN123');
 		$this->assertInstanceOf(TemplateResponse::class, $response);
 		$this->assertEquals('schedule-response-options', $response->getTemplateName());
 		$this->assertEquals(['token' => 'TOKEN123'], $response->getParams());
 	}
 
-	public function testProcessMoreOptionsResult() {
-		$this->request->expects($this->at(0))
+	/**
+	 * @dataProvider attendeeProvider
+	 */
+	public function testProcessMoreOptionsResult(bool $isExternalAttendee): void {
+		$this->request->expects($this->once())
 			->method('getParam')
 			->with('partStat')
 			->willReturn('TENTATIVE');
-		$this->request->expects($this->at(1))
-			->method('getParam')
-			->with('guests')
-			->willReturn('7');
-		$this->request->expects($this->at(2))
-			->method('getParam')
-			->with('comment')
-			->willReturn('Foo bar Bli blub');
 
 		$this->buildQueryExpects('TOKEN123', [
 			'id' => 0,
@@ -367,14 +380,12 @@ VERSION:2.0
 PRODID:-//Nextcloud/Nextcloud CalDAV Server//EN
 METHOD:REPLY
 BEGIN:VEVENT
-ATTENDEE;PARTSTAT=TENTATIVE;X-RESPONSE-COMMENT=Foo bar Bli blub;X-NUM-GUEST
- S=7:mailto:attendee@foo.bar
+ATTENDEE;PARTSTAT=TENTATIVE:mailto:attendee@foo.bar
 ORGANIZER:mailto:organizer@foo.bar
 UID:this-is-the-events-uid
 SEQUENCE:0
 REQUEST-STATUS:2.0;Success
 DTSTAMP:19700101T002217Z
-COMMENT:Foo bar Bli blub
 END:VEVENT
 END:VCALENDAR
 
@@ -384,20 +395,26 @@ EOF;
 		$called = false;
 		$this->responseServer->expects($this->once())
 			->method('handleITipMessage')
-			->willReturnCallback(function (Message $iTipMessage) use (&$called, $expected) {
+			->willReturnCallback(function (Message $iTipMessage) use (&$called, $isExternalAttendee, $expected): void {
 				$called = true;
 				$this->assertEquals('this-is-the-events-uid', $iTipMessage->uid);
 				$this->assertEquals('VEVENT', $iTipMessage->component);
 				$this->assertEquals('REPLY', $iTipMessage->method);
 				$this->assertEquals(null, $iTipMessage->sequence);
 				$this->assertEquals('mailto:attendee@foo.bar', $iTipMessage->sender);
-				$this->assertEquals('mailto:organizer@foo.bar', $iTipMessage->recipient);
+				if ($isExternalAttendee) {
+					$this->assertEquals('mailto:organizer@foo.bar', $iTipMessage->recipient);
+				} else {
+					$this->assertEquals('mailto:attendee@foo.bar', $iTipMessage->recipient);
+				}
 
 				$iTipMessage->scheduleStatus = '1.2;Message delivered locally';
 
 				$this->assertEquals($expected, $iTipMessage->message->serialize());
 			});
-
+		$this->responseServer->expects($this->once())
+			->method('isExternalAttendee')
+			->willReturn($isExternalAttendee);
 
 
 		$response = $this->controller->processMoreOptionsResult('TOKEN123');
@@ -407,7 +424,7 @@ EOF;
 		$this->assertTrue($called);
 	}
 
-	private function buildQueryExpects($token, $return, $time) {
+	private function buildQueryExpects($token, $return, $time): void {
 		$queryBuilder = $this->createMock(IQueryBuilder::class);
 		$stmt = $this->createMock(IResult::class);
 		$expr = $this->createMock(IExpressionBuilder::class);
@@ -427,31 +444,34 @@ EOF;
 			->method('fetch')
 			->with(\PDO::FETCH_ASSOC)
 			->willReturn($return);
+		$stmt->expects($this->once())
+			->method('closeCursor');
 
+		$function = 'functionToken';
 		$expr->expects($this->once())
 			->method('eq')
 			->with('token', 'namedParameterToken')
-			->willReturn('EQ STATEMENT');
+			->willReturn((string)$function);
 
 		$this->dbConnection->expects($this->once())
 			->method('getQueryBuilder')
 			->with()
 			->willReturn($queryBuilder);
 
-		$queryBuilder->expects($this->at(0))
+		$queryBuilder->expects($this->once())
 			->method('select')
 			->with('*')
 			->willReturn($queryBuilder);
-		$queryBuilder->expects($this->at(1))
+		$queryBuilder->expects($this->once())
 			->method('from')
 			->with('calendar_invitations')
 			->willReturn($queryBuilder);
-		$queryBuilder->expects($this->at(4))
+		$queryBuilder->expects($this->once())
 			->method('where')
-			->with('EQ STATEMENT')
+			->with($function)
 			->willReturn($queryBuilder);
-		$queryBuilder->expects($this->at(5))
-			->method('execute')
+		$queryBuilder->expects($this->once())
+			->method('executeQuery')
 			->with()
 			->willReturn($stmt);
 

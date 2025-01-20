@@ -1,7 +1,7 @@
 /**
- * Copyright (c) 2015, Arthur Schiwon <blizzz@owncloud.com>
- * This file is licensed under the Affero General Public License version 3 or later.
- * See the COPYING-README file.
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2015-2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 OCA = OCA || {};
@@ -16,8 +16,8 @@ OCA = OCA || {};
 		/**
 		 * initializes the instance. Always call it after initialization.
 		 *
-		 * @param tabIndex
-		 * @param tabID
+		 * @param {any} tabIndex -
+		 * @param {any} tabID -
 		 */
 		init: function (tabIndex, tabID) {
 			this._super(tabIndex, tabID);
@@ -134,7 +134,7 @@ OCA = OCA || {};
 		/**
 		 * presents the result of the login name test
 		 *
-		 * @param result
+		 * @param {any} result -
 		 */
 		handleLoginTestResult: function(result) {
 			var message;

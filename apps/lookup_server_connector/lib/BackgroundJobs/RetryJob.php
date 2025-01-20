@@ -3,32 +3,8 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2016 Bjoern Schiessle <bjoern@schiessle.org>
- * @copyright Copyright (c) 2019 Joas Schilling <coding@schilljs.com>
- *
- * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
- * @author Bjoern Schiessle <bjoern@schiessle.org>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Lukas Reschke <lukas@statuscode.ch>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Vincent Petry <vincent@nextcloud.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2016 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 namespace OCA\LookupServerConnector\BackgroundJobs;
 
@@ -39,27 +15,14 @@ use OCP\BackgroundJob\IJobList;
 use OCP\BackgroundJob\Job;
 use OCP\Http\Client\IClientService;
 use OCP\IConfig;
-use OCP\ILogger;
 use OCP\IUser;
 use OCP\IUserManager;
 
 class RetryJob extends Job {
-	/** @var IClientService */
-	private $clientService;
-	/** @var string */
-	private $lookupServer;
-	/** @var IConfig */
-	private $config;
-	/** @var IUserManager */
-	private $userManager;
-	/** @var IAccountManager */
-	private $accountManager;
-	/** @var Signer */
-	private $signer;
-	/** @var int */
-	protected $retries = 0;
-	/** @var bool */
-	protected $retainJob = false;
+	private string $lookupServer;
+	private Signer $signer;
+	protected int $retries = 0;
+	protected bool $retainJob = false;
 
 	/**
 	 * @param ITimeFactory $time
@@ -69,20 +32,18 @@ class RetryJob extends Job {
 	 * @param IAccountManager $accountManager
 	 * @param Signer $signer
 	 */
-	public function __construct(ITimeFactory $time,
-								IClientService $clientService,
-								IConfig $config,
-								IUserManager $userManager,
-								IAccountManager $accountManager,
-								Signer $signer) {
+	public function __construct(
+		ITimeFactory $time,
+		private IClientService $clientService,
+		private IConfig $config,
+		private IUserManager $userManager,
+		private IAccountManager $accountManager,
+		Signer $signer,
+	) {
 		parent::__construct($time);
-		$this->clientService = $clientService;
-		$this->config = $config;
-		$this->userManager = $userManager;
-		$this->accountManager = $accountManager;
 		$this->signer = $signer;
 
-		$this->lookupServer = $config->getSystemValue('lookup_server', 'https://lookup.nextcloud.com');
+		$this->lookupServer = $this->config->getSystemValue('lookup_server', 'https://lookup.nextcloud.com');
 		if (!empty($this->lookupServer)) {
 			$this->lookupServer = rtrim($this->lookupServer, '/');
 			$this->lookupServer .= '/users';
@@ -90,19 +51,16 @@ class RetryJob extends Job {
 	}
 
 	/**
-	 * run the job, then remove it from the jobList
-	 *
-	 * @param IJobList $jobList
-	 * @param ILogger|null $logger
+	 * Run the job, then remove it from the jobList
 	 */
-	public function execute(IJobList $jobList, ILogger $logger = null): void {
+	public function start(IJobList $jobList): void {
 		if (!isset($this->argument['userId'])) {
 			// Old background job without user id, just drop it.
 			$jobList->remove($this, $this->argument);
 			return;
 		}
 
-		$this->retries = (int) $this->config->getUserValue($this->argument['userId'], 'lookup_server_connector', 'update_retries', 0);
+		$this->retries = (int)$this->config->getUserValue($this->argument['userId'], 'lookup_server_connector', 'update_retries', '0');
 
 		if ($this->shouldRemoveBackgroundJob()) {
 			$jobList->remove($this, $this->argument);
@@ -110,7 +68,7 @@ class RetryJob extends Job {
 		}
 
 		if ($this->shouldRun()) {
-			parent::execute($jobList, $logger);
+			parent::start($jobList);
 			if (!$this->retainJob) {
 				$jobList->remove($this, $this->argument);
 			}
@@ -124,8 +82,6 @@ class RetryJob extends Job {
 	 * - no valid lookup server URL given
 	 * - lookup server was disabled by the admin
 	 * - max retries are reached (set to 5)
-	 *
-	 * @return bool
 	 */
 	protected function shouldRemoveBackgroundJob(): bool {
 		return $this->config->getSystemValueBool('has_internet_connection', true) === false ||

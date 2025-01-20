@@ -1,33 +1,13 @@
 <?php
 /**
- * @copyright Copyright (c) 2017 Joas Schilling <coding@schilljs.com>
- *
- * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Thomas Citharel <nextcloud@tcit.fr>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2017 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 namespace OCA\Settings;
 
 use OCA\Settings\Activity\Provider;
 use OCP\Activity\IManager as IActivityManager;
+use OCP\Defaults;
 use OCP\IConfig;
 use OCP\IGroupManager;
 use OCP\IURLGenerator;
@@ -39,39 +19,17 @@ use OCP\Mail\IMailer;
 
 class Hooks {
 
-	/** @var IActivityManager */
-	protected $activityManager;
-	/** @var IGroupManager|\OC\Group\Manager */
-	protected $groupManager;
-	/** @var IUserManager */
-	protected $userManager;
-	/** @var IUserSession */
-	protected $userSession;
-	/** @var IURLGenerator */
-	protected $urlGenerator;
-	/** @var IMailer */
-	protected $mailer;
-	/** @var IConfig */
-	protected $config;
-	/** @var IFactory */
-	protected $languageFactory;
-
-	public function __construct(IActivityManager $activityManager,
-								IGroupManager $groupManager,
-								IUserManager $userManager,
-								IUserSession $userSession,
-								IURLGenerator $urlGenerator,
-								IMailer $mailer,
-								IConfig $config,
-								IFactory $languageFactory) {
-		$this->activityManager = $activityManager;
-		$this->groupManager = $groupManager;
-		$this->userManager = $userManager;
-		$this->userSession = $userSession;
-		$this->urlGenerator = $urlGenerator;
-		$this->mailer = $mailer;
-		$this->config = $config;
-		$this->languageFactory = $languageFactory;
+	public function __construct(
+		protected IActivityManager $activityManager,
+		protected IGroupManager $groupManager,
+		protected IUserManager $userManager,
+		protected IUserSession $userSession,
+		protected IURLGenerator $urlGenerator,
+		protected IMailer $mailer,
+		protected IConfig $config,
+		protected IFactory $languageFactory,
+		protected Defaults $defaults,
+	) {
 	}
 
 	/**
@@ -93,6 +51,7 @@ class Hooks {
 			->setType('personal_settings')
 			->setAffectedUser($user->getUID());
 
+		$instanceName = $this->defaults->getName();
 		$instanceUrl = $this->urlGenerator->getAbsoluteURL('/');
 		$language = $this->languageFactory->getUserLanguage($user);
 		$l = $this->languageFactory->get('settings', $language);
@@ -131,7 +90,7 @@ class Hooks {
 				'instanceUrl' => $instanceUrl,
 			]);
 
-			$template->setSubject($l->t('Password for %1$s changed on %2$s', [$user->getDisplayName(), $instanceUrl]));
+			$template->setSubject($l->t('Password for %1$s changed on %2$s', [$user->getDisplayName(), $instanceName]));
 			$template->addHeader();
 			$template->addHeading($l->t('Password changed for %s', [$user->getDisplayName()]), false);
 			$template->addBodyText($text . ' ' . $l->t('If you did not request this, please contact an administrator.'));
@@ -172,12 +131,17 @@ class Hooks {
 		if ($actor instanceof IUser) {
 			$subject = Provider::EMAIL_CHANGED_SELF;
 			if ($actor->getUID() !== $user->getUID()) {
+				// set via the OCS API
+				if ($this->config->getAppValue('settings', 'disable_activity.email_address_changed_by_admin', 'no') === 'yes') {
+					return;
+				}
 				$subject = Provider::EMAIL_CHANGED;
 			}
 			$text = $l->t('Your email address on %s was changed.', [$instanceUrl]);
 			$event->setAuthor($actor->getUID())
 				->setSubject($subject);
 		} else {
+			// set with occ
 			if ($this->config->getAppValue('settings', 'disable_activity.email_address_changed_by_admin', 'no') === 'yes') {
 				return;
 			}

@@ -1,35 +1,22 @@
 <!--
-  - @copyright Copyright (c) 2020 Georg Ehrke <oc.list@georgehrke.com>
-  - @author Georg Ehrke <oc.list@georgehrke.com>
-  -
-  - @license GNU AGPL version 3 or any later version
-  -
-  - This program is free software: you can redistribute it and/or modify
-  - it under the terms of the GNU Affero General Public License as
-  - published by the Free Software Foundation, either version 3 of the
-  - License, or (at your option) any later version.
-  -
-  - This program is distributed in the hope that it will be useful,
-  - but WITHOUT ANY WARRANTY; without even the implied warranty of
-  - MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-  - GNU Affero General Public License for more details.
-  -
-  - You should have received a copy of the GNU Affero General Public License
-  - along with this program. If not, see <http://www.gnu.org/licenses/>.
-  -
-  -->
+  - SPDX-FileCopyrightText: 2020 Nextcloud GmbH and Nextcloud contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
+-->
 
 <template>
-	<Modal
-		size="normal"
-		:title="$t('user_status', 'Set status')"
+	<NcModal size="normal"
+		:name="$t('user_status', 'Set status')"
+		aria-labelledby="user_status-set-dialog"
+		:set-return-focus="setReturnFocus"
 		@close="closeModal">
 		<div class="set-status-modal">
 			<!-- Status selector -->
-			<div class="set-status-modal__header">
-				<h3>{{ $t('user_status', 'Online status') }}</h3>
-			</div>
-			<div class="set-status-modal__online-status">
+			<h2 id="user_status-set-dialog" class="set-status-modal__header">
+				{{ $t('user_status', 'Online status') }}
+			</h2>
+			<div class="set-status-modal__online-status"
+				role="radiogroup"
+				:aria-label="$t('user_status', 'Online status')">
 				<OnlineStatusSelect v-for="status in statuses"
 					:key="status.type"
 					v-bind="status"
@@ -37,51 +24,69 @@
 					@select="changeStatus" />
 			</div>
 
-			<!-- Status message -->
-			<div class="set-status-modal__header">
-				<h3>{{ $t('user_status', 'Status message') }}</h3>
-			</div>
-			<div class="set-status-modal__custom-input">
-				<EmojiPicker @select="setIcon">
-					<button
-						class="custom-input__emoji-button">
-						{{ visibleIcon }}
-					</button>
-				</EmojiPicker>
-				<CustomMessageInput
-					ref="customMessageInput"
-					:message="message"
-					@change="setMessage"
-					@submit="saveStatus" />
-			</div>
-			<PredefinedStatusesList
-				@selectStatus="selectPredefinedMessage" />
-			<ClearAtSelect
-				:clear-at="clearAt"
-				@selectClearAt="setClearAt" />
-			<div class="status-buttons">
-				<button class="status-buttons__select" :disabled="isSavingStatus" @click="clearStatus">
-					{{ $t('user_status', 'Clear status message') }}
-				</button>
-				<button class="status-buttons__primary primary" :disabled="isSavingStatus" @click="saveStatus">
-					{{ $t('user_status', 'Set status message') }}
-				</button>
-			</div>
+			<!-- Status message form -->
+			<form @submit.prevent="saveStatus" @reset="clearStatus">
+				<h3 class="set-status-modal__header">
+					{{ $t('user_status', 'Status message') }}
+				</h3>
+				<div class="set-status-modal__custom-input">
+					<CustomMessageInput ref="customMessageInput"
+						:icon="icon"
+						:message="editedMessage"
+						@change="setMessage"
+						@select-icon="setIcon" />
+					<NcButton v-if="messageId === 'vacationing'"
+						:href="absencePageUrl"
+						target="_blank"
+						type="secondary"
+						:aria-label="$t('user_status', 'Set absence period')">
+						{{ $t('user_status', 'Set absence period and replacement') + ' ↗' }}
+					</NcButton>
+				</div>
+				<div v-if="hasBackupStatus"
+					class="set-status-modal__automation-hint">
+					{{ $t('user_status', 'Your status was set automatically') }}
+				</div>
+				<PreviousStatus v-if="hasBackupStatus"
+					:icon="backupIcon"
+					:message="backupMessage"
+					@select="revertBackupFromServer" />
+				<PredefinedStatusesList @select-status="selectPredefinedMessage" />
+				<ClearAtSelect :clear-at="clearAt"
+					@select-clear-at="setClearAt" />
+				<div class="status-buttons">
+					<NcButton :wide="true"
+						type="tertiary"
+						native-type="reset"
+						:aria-label="$t('user_status', 'Clear status message')"
+						:disabled="isSavingStatus">
+						{{ $t('user_status', 'Clear status message') }}
+					</NcButton>
+					<NcButton :wide="true"
+						type="primary"
+						native-type="submit"
+						:aria-label="$t('user_status', 'Set status message')"
+						:disabled="isSavingStatus">
+						{{ $t('user_status', 'Set status message') }}
+					</NcButton>
+				</div>
+			</form>
 		</div>
-	</Modal>
+	</NcModal>
 </template>
 
 <script>
 import { showError } from '@nextcloud/dialogs'
-import EmojiPicker from '@nextcloud/vue/dist/Components/EmojiPicker'
-import Modal from '@nextcloud/vue/dist/Components/Modal'
-
-import { getAllStatusOptions } from '../services/statusOptionsService'
-import OnlineStatusMixin from '../mixins/OnlineStatusMixin'
-import PredefinedStatusesList from './PredefinedStatusesList'
-import CustomMessageInput from './CustomMessageInput'
-import ClearAtSelect from './ClearAtSelect'
-import OnlineStatusSelect from './OnlineStatusSelect'
+import { generateUrl } from '@nextcloud/router'
+import NcModal from '@nextcloud/vue/dist/Components/NcModal.js'
+import NcButton from '@nextcloud/vue/dist/Components/NcButton.js'
+import { getAllStatusOptions } from '../services/statusOptionsService.js'
+import OnlineStatusMixin from '../mixins/OnlineStatusMixin.js'
+import PredefinedStatusesList from './PredefinedStatusesList.vue'
+import PreviousStatus from './PreviousStatus.vue'
+import CustomMessageInput from './CustomMessageInput.vue'
+import ClearAtSelect from './ClearAtSelect.vue'
+import OnlineStatusSelect from './OnlineStatusSelect.vue'
 
 export default {
 	name: 'SetStatusModal',
@@ -89,30 +94,93 @@ export default {
 	components: {
 		ClearAtSelect,
 		CustomMessageInput,
-		EmojiPicker,
-		Modal,
+		NcModal,
 		OnlineStatusSelect,
 		PredefinedStatusesList,
+		PreviousStatus,
+		NcButton,
 	},
 	mixins: [OnlineStatusMixin],
+
+	props: {
+		/**
+		 * Whether the component should be rendered as a Dashboard Status or a User Menu Entries
+		 * true = Dashboard Status
+		 * false = User Menu Entries
+		 */
+		inline: {
+			type: Boolean,
+			default: false,
+		},
+	},
 
 	data() {
 		return {
 			clearAt: null,
-			icon: null,
-			message: '',
+			editedMessage: '',
+			predefinedMessageId: null,
 			isSavingStatus: false,
 			statuses: getAllStatusOptions(),
 		}
 	},
+
 	computed: {
-		/**
-		 * Returns the user-set icon or a smiley in case no icon is set
-		 *
-		 * @returns {String}
-		 */
-		visibleIcon() {
-			return this.icon || '😀'
+		messageId() {
+			return this.$store.state.userStatus.messageId
+		},
+		icon() {
+			return this.$store.state.userStatus.icon
+		},
+		message() {
+			return this.$store.state.userStatus.message || ''
+		},
+		hasBackupStatus() {
+			return this.messageId && (this.backupIcon || this.backupMessage)
+		},
+		backupIcon() {
+			return this.$store.state.userBackupStatus.icon || ''
+		},
+		backupMessage() {
+			return this.$store.state.userBackupStatus.message || ''
+		},
+
+		absencePageUrl() {
+			return generateUrl('settings/user/availability#absence')
+		},
+
+		resetButtonText() {
+			if (this.backupIcon && this.backupMessage) {
+				return this.$t('user_status', 'Reset status to "{icon} {message}"', {
+					icon: this.backupIcon,
+					message: this.backupMessage,
+				})
+			} else if (this.backupMessage) {
+				return this.$t('user_status', 'Reset status to "{message}"', {
+					message: this.backupMessage,
+				})
+			} else if (this.backupIcon) {
+				return this.$t('user_status', 'Reset status to "{icon}"', {
+					icon: this.backupIcon,
+				})
+			}
+
+			return this.$t('user_status', 'Reset status')
+		},
+
+		setReturnFocus() {
+			if (this.inline) {
+				return undefined
+			}
+			return document.querySelector('[aria-controls="header-menu-user-menu"]') ?? undefined
+		},
+	},
+
+	watch: {
+		message: {
+			immediate: true,
+			handler(newValue) {
+				this.editedMessage = newValue
+			},
 		},
 	},
 
@@ -120,10 +188,9 @@ export default {
 	 * Loads the current status when a user opens dialog
 	 */
 	mounted() {
-		this.messageId = this.$store.state.userStatus.messageId
-		this.icon = this.$store.state.userStatus.icon
-		this.message = this.$store.state.userStatus.message || ''
+		this.$store.dispatch('fetchBackupFromServer')
 
+		this.predefinedMessageId = this.$store.state.userStatus.messageId
 		if (this.$store.state.userStatus.clearAt !== null) {
 			this.clearAt = {
 				type: '_time',
@@ -141,11 +208,15 @@ export default {
 		/**
 		 * Sets a new icon
 		 *
-		 * @param {String} icon The new icon
+		 * @param {string} icon The new icon
 		 */
 		setIcon(icon) {
-			this.messageId = null
-			this.icon = icon
+			this.predefinedMessageId = null
+			this.$store.dispatch('setCustomMessage', {
+				message: this.message,
+				icon,
+				clearAt: this.clearAt,
+			})
 			this.$nextTick(() => {
 				this.$refs.customMessageInput.focus()
 			})
@@ -153,16 +224,16 @@ export default {
 		/**
 		 * Sets a new message
 		 *
-		 * @param {String} message The new message
+		 * @param {string} message The new message
 		 */
 		setMessage(message) {
-			this.messageId = null
-			this.message = message
+			this.predefinedMessageId = null
+			this.editedMessage = message
 		},
 		/**
 		 * Sets a new clearAt value
 		 *
-		 * @param {Object} clearAt The new clearAt object
+		 * @param {object} clearAt The new clearAt object
 		 */
 		setClearAt(clearAt) {
 			this.clearAt = clearAt
@@ -170,18 +241,20 @@ export default {
 		/**
 		 * Sets new icon/message/clearAt based on a predefined message
 		 *
-		 * @param {Object} status The predefined status object
+		 * @param {object} status The predefined status object
 		 */
 		selectPredefinedMessage(status) {
-			this.messageId = status.id
+			this.predefinedMessageId = status.id
 			this.clearAt = status.clearAt
-			this.icon = status.icon
-			this.message = status.message
+			this.$store.dispatch('setPredefinedMessage', {
+				messageId: status.id,
+				clearAt: status.clearAt,
+			})
 		},
 		/**
 		 * Saves the status and closes the
 		 *
-		 * @returns {Promise<void>}
+		 * @return {Promise<void>}
 		 */
 		async saveStatus() {
 			if (this.isSavingStatus) {
@@ -191,15 +264,15 @@ export default {
 			try {
 				this.isSavingStatus = true
 
-				if (this.messageId !== null) {
-					await this.$store.dispatch('setPredefinedMessage', {
-						messageId: this.messageId,
+				if (this.predefinedMessageId === null) {
+					await this.$store.dispatch('setCustomMessage', {
+						message: this.editedMessage,
+						icon: this.icon,
 						clearAt: this.clearAt,
 					})
 				} else {
-					await this.$store.dispatch('setCustomMessage', {
-						message: this.message,
-						icon: this.icon,
+					this.$store.dispatch('setPredefinedMessage', {
+						messageId: this.predefinedMessageId,
 						clearAt: this.clearAt,
 					})
 				}
@@ -215,7 +288,7 @@ export default {
 		},
 		/**
 		 *
-		 * @returns {Promise<void>}
+		 * @return {Promise<void>}
 		 */
 		async clearStatus() {
 			try {
@@ -230,54 +303,75 @@ export default {
 			}
 
 			this.isSavingStatus = false
+			this.predefinedMessageId = null
 			this.closeModal()
+		},
+		/**
+		 *
+		 * @return {Promise<void>}
+		 */
+		async revertBackupFromServer() {
+			try {
+				this.isSavingStatus = true
+
+				await this.$store.dispatch('revertBackupFromServer', {
+					messageId: this.messageId,
+				})
+			} catch (err) {
+				showError(this.$t('user_status', 'There was an error reverting the status'))
+				console.debug(err)
+				this.isSavingStatus = false
+				return
+			}
+
+			this.isSavingStatus = false
+			this.predefinedMessageId = this.$store.state.userStatus?.messageId
 		},
 	},
 }
 </script>
 
 <style lang="scss" scoped>
+
 .set-status-modal {
-	min-height: 200px;
 	padding: 8px 20px 20px 20px;
-	// Enable scrollbar for too long content, same way as in Dashboard customize
-	max-height: 70vh;
-	overflow: auto;
 
 	&__header {
+		font-size: 21px;
 		text-align: center;
-		font-weight: bold;
+		height: fit-content;
+		min-height: var(--default-clickable-area);
+		line-height: var(--default-clickable-area);
+		overflow-wrap: break-word;
+		margin-block: 0 12px;
 	}
 
 	&__online-status {
 		display: grid;
-		// Space between the two sections
-		margin-bottom: 40px;
 		grid-template-columns: 1fr 1fr;
 	}
 
 	&__custom-input {
 		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: var(--default-grid-baseline);
 		width: 100%;
 		margin-bottom: 10px;
+	}
 
-		.custom-input__emoji-button {
-			flex-basis: 40px;
-			flex-grow: 0;
-			width: 40px;
-			height: 34px;
-			margin-right: 0;
-			border-right: none;
-			border-radius: var(--border-radius) 0 0 var(--border-radius);
-		}
+	&__automation-hint {
+		display: flex;
+		width: 100%;
+		margin-bottom: 10px;
+		color: var(--color-text-maxcontrast);
 	}
 
 	.status-buttons {
 		display: flex;
-
-		button {
-			flex-basis: 50%;
-		}
+		padding: 3px;
+		padding-inline-start:0;
+		gap: 3px;
 	}
 }
 

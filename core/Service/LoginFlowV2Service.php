@@ -3,30 +3,11 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2019, Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @author Daniel Kesselberg <mail@danielkesselberg.de>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 namespace OC\Core\Service;
 
-use OC\Authentication\Exceptions\InvalidTokenException;
 use OC\Authentication\Exceptions\PasswordlessTokenException;
 use OC\Authentication\Token\IProvider;
 use OC\Authentication\Token\IToken;
@@ -37,42 +18,22 @@ use OC\Core\Db\LoginFlowV2Mapper;
 use OC\Core\Exception\LoginFlowV2NotFoundException;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Utility\ITimeFactory;
+use OCP\Authentication\Exceptions\InvalidTokenException;
 use OCP\IConfig;
-use OCP\ILogger;
 use OCP\Security\ICrypto;
 use OCP\Security\ISecureRandom;
+use Psr\Log\LoggerInterface;
 
 class LoginFlowV2Service {
-
-	/** @var LoginFlowV2Mapper */
-	private $mapper;
-	/** @var ISecureRandom */
-	private $random;
-	/** @var ITimeFactory */
-	private $time;
-	/** @var IConfig */
-	private $config;
-	/** @var ICrypto */
-	private $crypto;
-	/** @var ILogger */
-	private $logger;
-	/** @var IProvider */
-	private $tokenProvider;
-
-	public function __construct(LoginFlowV2Mapper $mapper,
-								ISecureRandom $random,
-								ITimeFactory $time,
-								IConfig $config,
-								ICrypto $crypto,
-								ILogger $logger,
-								IProvider $tokenProvider) {
-		$this->mapper = $mapper;
-		$this->random = $random;
-		$this->time = $time;
-		$this->config = $config;
-		$this->crypto = $crypto;
-		$this->logger = $logger;
-		$this->tokenProvider = $tokenProvider;
+	public function __construct(
+		private LoginFlowV2Mapper $mapper,
+		private ISecureRandom $random,
+		private ITimeFactory $time,
+		private IConfig $config,
+		private ICrypto $crypto,
+		private LoggerInterface $logger,
+		private IProvider $tokenProvider,
+	) {
 	}
 
 	/**
@@ -165,7 +126,7 @@ class LoginFlowV2Service {
 			return false;
 		}
 
-		$appPassword = $this->random->generate(72, ISecureRandom::CHAR_UPPER.ISecureRandom::CHAR_LOWER.ISecureRandom::CHAR_DIGITS);
+		$appPassword = $this->random->generate(72, ISecureRandom::CHAR_UPPER . ISecureRandom::CHAR_LOWER . ISecureRandom::CHAR_DIGITS);
 		$this->tokenProvider->generateToken(
 			$appPassword,
 			$userId,
@@ -186,10 +147,27 @@ class LoginFlowV2Service {
 		return true;
 	}
 
+	public function flowDoneWithAppPassword(string $loginToken, string $server, string $loginName, string $appPassword): bool {
+		try {
+			$data = $this->mapper->getByLoginToken($loginToken);
+		} catch (DoesNotExistException $e) {
+			return false;
+		}
+
+		$data->setLoginName($loginName);
+		$data->setServer($server);
+
+		// Properly encrypt
+		$data->setAppPassword($this->encryptPassword($appPassword, $data->getPublicKey()));
+
+		$this->mapper->update($data);
+		return true;
+	}
+
 	public function createTokens(string $userAgent): LoginFlowV2Tokens {
 		$flow = new LoginFlowV2();
-		$pollToken = $this->random->generate(128, ISecureRandom::CHAR_DIGITS.ISecureRandom::CHAR_LOWER.ISecureRandom::CHAR_UPPER);
-		$loginToken = $this->random->generate(128, ISecureRandom::CHAR_DIGITS.ISecureRandom::CHAR_LOWER.ISecureRandom::CHAR_UPPER);
+		$pollToken = $this->random->generate(128, ISecureRandom::CHAR_DIGITS . ISecureRandom::CHAR_LOWER . ISecureRandom::CHAR_UPPER);
+		$loginToken = $this->random->generate(128, ISecureRandom::CHAR_DIGITS . ISecureRandom::CHAR_LOWER . ISecureRandom::CHAR_UPPER);
 		$flow->setPollToken($this->hashToken($pollToken));
 		$flow->setLoginToken($loginToken);
 		$flow->setStarted(0);

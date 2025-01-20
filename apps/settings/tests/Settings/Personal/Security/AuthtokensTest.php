@@ -3,33 +3,17 @@
 declare(strict_types=1);
 
 /**
- * @copyright 2019 Christoph Wurst <christoph@winzerhof-wurst.at>
- *
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 namespace OCA\Settings\Tests\Settings\Personal\Security;
 
-use OC\Authentication\Token\DefaultToken;
 use OC\Authentication\Token\IProvider as IAuthTokenProvider;
+use OC\Authentication\Token\PublicKeyToken;
 use OCA\Settings\Settings\Personal\Security\Authtokens;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\Services\IInitialState;
+use OCP\Authentication\Token\IToken;
 use OCP\ISession;
 use OCP\IUserSession;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -73,16 +57,16 @@ class AuthtokensTest extends TestCase {
 		);
 	}
 
-	public function testGetForm() {
-		$token1 = new DefaultToken();
+	public function testGetForm(): void {
+		$token1 = new PublicKeyToken();
 		$token1->setId(100);
-		$token2 = new DefaultToken();
+		$token2 = new PublicKeyToken();
 		$token2->setId(200);
 		$tokens = [
 			$token1,
 			$token2,
 		];
-		$sessionToken = new DefaultToken();
+		$sessionToken = new PublicKeyToken();
 		$sessionToken->setId(100);
 
 		$this->authTokenProvider->expects($this->once())
@@ -96,33 +80,34 @@ class AuthtokensTest extends TestCase {
 			->method('getToken')
 			->with('session123')
 			->willReturn($sessionToken);
-		$this->initialState->expects($this->at(0))
+		$this->initialState->expects($this->exactly(2))
 			->method('provideInitialState')
-			->with('app_tokens', [
+			->withConsecutive(
 				[
-					'id' => 100,
-					'name' => null,
-					'lastActivity' => 0,
-					'type' => 0,
-					'canDelete' => false,
-					'current' => true,
-					'scope' => ['filesystem' => true],
-					'canRename' => false,
+					'app_tokens', [
+						[
+							'id' => 100,
+							'name' => null,
+							'lastActivity' => 0,
+							'type' => 0,
+							'canDelete' => false,
+							'current' => true,
+							'scope' => [IToken::SCOPE_FILESYSTEM => true],
+							'canRename' => false,
+						],
+						[
+							'id' => 200,
+							'name' => null,
+							'lastActivity' => 0,
+							'type' => 0,
+							'canDelete' => true,
+							'scope' => [IToken::SCOPE_FILESYSTEM => true],
+							'canRename' => true,
+						],
+					]
 				],
-				[
-					'id' => 200,
-					'name' => null,
-					'lastActivity' => 0,
-					'type' => 0,
-					'canDelete' => true,
-					'scope' => ['filesystem' => true],
-					'canRename' => true,
-				],
-			]);
-
-		$this->initialState->expects($this->at(1))
-			->method('provideInitialState')
-			->with('can_create_app_token', true);
+				['can_create_app_token', true],
+			);
 
 		$form = $this->section->getForm();
 

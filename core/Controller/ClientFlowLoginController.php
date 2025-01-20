@@ -1,151 +1,78 @@
 <?php
 /**
- * @copyright Copyright (c) 2017 Lukas Reschke <lukas@statuscode.ch>
- *
- * @author Bjoern Schiessle <bjoern@schiessle.org>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Daniel Kesselberg <mail@danielkesselberg.de>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Lukas Reschke <lukas@statuscode.ch>
- * @author Mario Danic <mario@lovelyhq.com>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author RussellAult <RussellAult@users.noreply.github.com>
- * @author Sergej Nikolaev <kinolaev@gmail.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2017 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 namespace OC\Core\Controller;
 
 use OC\Authentication\Events\AppPasswordCreatedEvent;
-use OC\Authentication\Exceptions\InvalidTokenException;
 use OC\Authentication\Exceptions\PasswordlessTokenException;
 use OC\Authentication\Token\IProvider;
-use OC\Authentication\Token\IToken;
 use OCA\OAuth2\Db\AccessToken;
 use OCA\OAuth2\Db\AccessTokenMapper;
 use OCA\OAuth2\Db\ClientMapper;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\FrontpageRoute;
+use OCP\AppFramework\Http\Attribute\NoAdminRequired;
+use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
+use OCP\AppFramework\Http\Attribute\OpenAPI;
+use OCP\AppFramework\Http\Attribute\PublicPage;
+use OCP\AppFramework\Http\Attribute\UseSession;
 use OCP\AppFramework\Http\Response;
 use OCP\AppFramework\Http\StandaloneTemplateResponse;
+use OCP\AppFramework\Utility\ITimeFactory;
+use OCP\Authentication\Exceptions\InvalidTokenException;
+use OCP\Authentication\Token\IToken;
 use OCP\Defaults;
 use OCP\EventDispatcher\IEventDispatcher;
 use OCP\IL10N;
 use OCP\IRequest;
 use OCP\ISession;
 use OCP\IURLGenerator;
+use OCP\IUser;
 use OCP\IUserSession;
 use OCP\Security\ICrypto;
 use OCP\Security\ISecureRandom;
 use OCP\Session\Exceptions\SessionNotAvailableException;
 
+#[OpenAPI(scope: OpenAPI::SCOPE_IGNORE)]
 class ClientFlowLoginController extends Controller {
-	/** @var IUserSession */
-	private $userSession;
-	/** @var IL10N */
-	private $l10n;
-	/** @var Defaults */
-	private $defaults;
-	/** @var ISession */
-	private $session;
-	/** @var IProvider */
-	private $tokenProvider;
-	/** @var ISecureRandom */
-	private $random;
-	/** @var IURLGenerator */
-	private $urlGenerator;
-	/** @var ClientMapper */
-	private $clientMapper;
-	/** @var AccessTokenMapper */
-	private $accessTokenMapper;
-	/** @var ICrypto */
-	private $crypto;
-	/** @var IEventDispatcher */
-	private $eventDispatcher;
-
 	public const STATE_NAME = 'client.flow.state.token';
 
-	/**
-	 * @param string $appName
-	 * @param IRequest $request
-	 * @param IUserSession $userSession
-	 * @param IL10N $l10n
-	 * @param Defaults $defaults
-	 * @param ISession $session
-	 * @param IProvider $tokenProvider
-	 * @param ISecureRandom $random
-	 * @param IURLGenerator $urlGenerator
-	 * @param ClientMapper $clientMapper
-	 * @param AccessTokenMapper $accessTokenMapper
-	 * @param ICrypto $crypto
-	 * @param IEventDispatcher $eventDispatcher
-	 */
-	public function __construct($appName,
-								IRequest $request,
-								IUserSession $userSession,
-								IL10N $l10n,
-								Defaults $defaults,
-								ISession $session,
-								IProvider $tokenProvider,
-								ISecureRandom $random,
-								IURLGenerator $urlGenerator,
-								ClientMapper $clientMapper,
-								AccessTokenMapper $accessTokenMapper,
-								ICrypto $crypto,
-								IEventDispatcher $eventDispatcher) {
+	public function __construct(
+		string $appName,
+		IRequest $request,
+		private IUserSession $userSession,
+		private IL10N $l10n,
+		private Defaults $defaults,
+		private ISession $session,
+		private IProvider $tokenProvider,
+		private ISecureRandom $random,
+		private IURLGenerator $urlGenerator,
+		private ClientMapper $clientMapper,
+		private AccessTokenMapper $accessTokenMapper,
+		private ICrypto $crypto,
+		private IEventDispatcher $eventDispatcher,
+		private ITimeFactory $timeFactory,
+	) {
 		parent::__construct($appName, $request);
-		$this->userSession = $userSession;
-		$this->l10n = $l10n;
-		$this->defaults = $defaults;
-		$this->session = $session;
-		$this->tokenProvider = $tokenProvider;
-		$this->random = $random;
-		$this->urlGenerator = $urlGenerator;
-		$this->clientMapper = $clientMapper;
-		$this->accessTokenMapper = $accessTokenMapper;
-		$this->crypto = $crypto;
-		$this->eventDispatcher = $eventDispatcher;
 	}
 
-	/**
-	 * @return string
-	 */
-	private function getClientName() {
+	private function getClientName(): string {
 		$userAgent = $this->request->getHeader('USER_AGENT');
 		return $userAgent !== '' ? $userAgent : 'unknown';
 	}
 
-	/**
-	 * @param string $stateToken
-	 * @return bool
-	 */
-	private function isValidToken($stateToken) {
+	private function isValidToken(string $stateToken): bool {
 		$currentToken = $this->session->get(self::STATE_NAME);
-		if (!is_string($stateToken) || !is_string($currentToken)) {
+		if (!is_string($currentToken)) {
 			return false;
 		}
 		return hash_equals($currentToken, $stateToken);
 	}
 
-	/**
-	 * @return StandaloneTemplateResponse
-	 */
-	private function stateTokenForbiddenResponse() {
+	private function stateTokenForbiddenResponse(): StandaloneTemplateResponse {
 		$response = new StandaloneTemplateResponse(
 			$this->appName,
 			'403',
@@ -158,16 +85,11 @@ class ClientFlowLoginController extends Controller {
 		return $response;
 	}
 
-	/**
-	 * @PublicPage
-	 * @NoCSRFRequired
-	 * @UseSession
-	 *
-	 * @param string $clientIdentifier
-	 *
-	 * @return StandaloneTemplateResponse
-	 */
-	public function showAuthPickerPage($clientIdentifier = '') {
+	#[PublicPage]
+	#[NoCSRFRequired]
+	#[UseSession]
+	#[FrontpageRoute(verb: 'GET', url: '/login/flow')]
+	public function showAuthPickerPage(string $clientIdentifier = '', string $user = '', int $direct = 0): StandaloneTemplateResponse {
 		$clientName = $this->getClientName();
 		$client = null;
 		if ($clientIdentifier !== '') {
@@ -196,7 +118,7 @@ class ClientFlowLoginController extends Controller {
 
 		$stateToken = $this->random->generate(
 			64,
-			ISecureRandom::CHAR_LOWER.ISecureRandom::CHAR_UPPER.ISecureRandom::CHAR_DIGITS
+			ISecureRandom::CHAR_LOWER . ISecureRandom::CHAR_UPPER . ISecureRandom::CHAR_DIGITS
 		);
 		$this->session->set(self::STATE_NAME, $stateToken);
 
@@ -218,6 +140,8 @@ class ClientFlowLoginController extends Controller {
 				'stateToken' => $stateToken,
 				'serverHost' => $this->getServerPath(),
 				'oauthState' => $this->session->get('oauth.state'),
+				'user' => $user,
+				'direct' => $direct,
 			],
 			'guest'
 		);
@@ -227,17 +151,17 @@ class ClientFlowLoginController extends Controller {
 	}
 
 	/**
-	 * @NoAdminRequired
-	 * @NoCSRFRequired
 	 * @NoSameSiteCookieRequired
-	 * @UseSession
-	 *
-	 * @param string $stateToken
-	 * @param string $clientIdentifier
-	 * @return StandaloneTemplateResponse
 	 */
-	public function grantPage($stateToken = '',
-								 $clientIdentifier = '') {
+	#[NoAdminRequired]
+	#[NoCSRFRequired]
+	#[UseSession]
+	#[FrontpageRoute(verb: 'GET', url: '/login/flow/grant')]
+	public function grantPage(
+		string $stateToken = '',
+		string $clientIdentifier = '',
+		int $direct = 0,
+	): Response {
 		if (!$this->isValidToken($stateToken)) {
 			return $this->stateTokenForbiddenResponse();
 		}
@@ -256,10 +180,15 @@ class ClientFlowLoginController extends Controller {
 			$csp->addAllowedFormActionDomain('nc://*');
 		}
 
+		/** @var IUser $user */
+		$user = $this->userSession->getUser();
+
 		$response = new StandaloneTemplateResponse(
 			$this->appName,
 			'loginflow/grant',
 			[
+				'userId' => $user->getUID(),
+				'userDisplayName' => $user->getDisplayName(),
 				'client' => $clientName,
 				'clientIdentifier' => $clientIdentifier,
 				'instanceName' => $this->defaults->getName(),
@@ -267,6 +196,7 @@ class ClientFlowLoginController extends Controller {
 				'stateToken' => $stateToken,
 				'serverHost' => $this->getServerPath(),
 				'oauthState' => $this->session->get('oauth.state'),
+				'direct' => $direct,
 			],
 			'guest'
 		);
@@ -275,16 +205,13 @@ class ClientFlowLoginController extends Controller {
 		return $response;
 	}
 
-	/**
-	 * @NoAdminRequired
-	 * @UseSession
-	 *
-	 * @param string $stateToken
-	 * @param string $clientIdentifier
-	 * @return Http\RedirectResponse|Response
-	 */
-	public function generateAppPassword($stateToken,
-										$clientIdentifier = '') {
+	#[NoAdminRequired]
+	#[UseSession]
+	#[FrontpageRoute(verb: 'POST', url: '/login/flow')]
+	public function generateAppPassword(
+		string $stateToken,
+		string $clientIdentifier = '',
+	): Response {
 		if (!$this->isValidToken($stateToken)) {
 			$this->session->remove(self::STATE_NAME);
 			return $this->stateTokenForbiddenResponse();
@@ -321,7 +248,7 @@ class ClientFlowLoginController extends Controller {
 			$clientName = $client->getName();
 		}
 
-		$token = $this->random->generate(72, ISecureRandom::CHAR_UPPER.ISecureRandom::CHAR_LOWER.ISecureRandom::CHAR_DIGITS);
+		$token = $this->random->generate(72, ISecureRandom::CHAR_UPPER . ISecureRandom::CHAR_LOWER . ISecureRandom::CHAR_DIGITS);
 		$uid = $this->userSession->getUser()->getUID();
 		$generatedToken = $this->tokenProvider->generateToken(
 			$token,
@@ -334,12 +261,13 @@ class ClientFlowLoginController extends Controller {
 		);
 
 		if ($client) {
-			$code = $this->random->generate(128, ISecureRandom::CHAR_UPPER.ISecureRandom::CHAR_LOWER.ISecureRandom::CHAR_DIGITS);
+			$code = $this->random->generate(128, ISecureRandom::CHAR_UPPER . ISecureRandom::CHAR_LOWER . ISecureRandom::CHAR_DIGITS);
 			$accessToken = new AccessToken();
 			$accessToken->setClientId($client->getId());
 			$accessToken->setEncryptedToken($this->crypto->encrypt($token, $code));
 			$accessToken->setHashedCode(hash('sha512', $code));
 			$accessToken->setTokenId($generatedToken->getId());
+			$accessToken->setCodeCreatedAt($this->timeFactory->now()->getTimestamp());
 			$this->accessTokenMapper->insert($accessToken);
 
 			$redirectUri = $client->getRedirectUri();
@@ -370,10 +298,9 @@ class ClientFlowLoginController extends Controller {
 		return new Http\RedirectResponse($redirectUri);
 	}
 
-	/**
-	 * @PublicPage
-	 */
-	public function apptokenRedirect(string $stateToken, string $user, string $password) {
+	#[PublicPage]
+	#[FrontpageRoute(verb: 'POST', url: '/login/flow/apptoken')]
+	public function apptokenRedirect(string $stateToken, string $user, string $password): Response {
 		if (!$this->isValidToken($stateToken)) {
 			return $this->stateTokenForbiddenResponse();
 		}
@@ -403,15 +330,15 @@ class ClientFlowLoginController extends Controller {
 	private function getServerPath(): string {
 		$serverPostfix = '';
 
-		if (strpos($this->request->getRequestUri(), '/index.php') !== false) {
+		if (str_contains($this->request->getRequestUri(), '/index.php')) {
 			$serverPostfix = substr($this->request->getRequestUri(), 0, strpos($this->request->getRequestUri(), '/index.php'));
-		} elseif (strpos($this->request->getRequestUri(), '/login/flow') !== false) {
+		} elseif (str_contains($this->request->getRequestUri(), '/login/flow')) {
 			$serverPostfix = substr($this->request->getRequestUri(), 0, strpos($this->request->getRequestUri(), '/login/flow'));
 		}
 
 		$protocol = $this->request->getServerProtocol();
 
-		if ($protocol !== "https") {
+		if ($protocol !== 'https') {
 			$xForwardedProto = $this->request->getHeader('X-Forwarded-Proto');
 			$xForwardedSSL = $this->request->getHeader('X-Forwarded-Ssl');
 			if ($xForwardedProto === 'https' || $xForwardedSSL === 'on') {
@@ -419,6 +346,6 @@ class ClientFlowLoginController extends Controller {
 			}
 		}
 
-		return $protocol . "://" . $this->request->getServerHost() . $serverPostfix;
+		return $protocol . '://' . $this->request->getServerHost() . $serverPostfix;
 	}
 }

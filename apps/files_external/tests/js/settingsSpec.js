@@ -1,31 +1,7 @@
 /**
- * Copyright (c) 2015 Vincent Petry <pvince81@owncloud.com>
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author John Molakvoæ <skjnldsv@protonmail.com>
- * @author Juan Pablo Villafáñez <jvillafanez@solidgear.es>
- * @author Julius Härtl <jus@bitgrid.net>
- * @author Robin Appelman <robin@icewind.nl>
- * @author Robin McCorkell <robin@mccorkell.me.uk>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Vincent Petry <vincent@nextcloud.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2015-2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 describe('OCA.Files_External.Settings tests', function() {
@@ -35,12 +11,13 @@ describe('OCA.Files_External.Settings tests', function() {
 
 	beforeEach(function() {
 		clock = sinon.useFakeTimers();
+		select2ApplicableUsers = [];
 		select2Stub = sinon.stub($.fn, 'select2').callsFake(function(args) {
 			if (args === 'val') {
 				return select2ApplicableUsers;
 			}
 			return {
-				on: function() {}
+				on: function() { return this; }
 			};
 		});
 
@@ -63,6 +40,7 @@ describe('OCA.Files_External.Settings tests', function() {
 			'<td class="authentication"></td>' +
 			'<td class="configuration"></td>' +
 			'<td class="applicable">' +
+			'<input type="checkbox" class="applicableToAllUsers">' +
 			'<input type="hidden" class="applicableUsers">' +
 			'</td>' +
 			'<td class="mountOptionsToggle">'+
@@ -172,6 +150,7 @@ describe('OCA.Files_External.Settings tests', function() {
 
 		function selectBackend(backendName) {
 			view.$el.find('.selectBackend:first').val(backendName).trigger('change');
+			view.$el.find('.applicableToAllUsers').prop('checked', true).trigger('change');
 		}
 
 		beforeEach(function() {
@@ -183,8 +162,8 @@ describe('OCA.Files_External.Settings tests', function() {
 		});
 		describe('selecting backend', function() {
 			it('populates the row and creates a new empty one', function() {
-				var $firstRow = view.$el.find('tr:first');
 				selectBackend('\\OC\\TestBackend');
+				var $firstRow = view.$el.find('tr:first');
 				expect($firstRow.find('.backend').text()).toEqual('Test Backend');
 				expect($firstRow.find('.selectBackend').length).toEqual(0);
 
@@ -205,8 +184,8 @@ describe('OCA.Files_External.Settings tests', function() {
 				// TODO: check "remove" button visibility
 			});
 			it('shows row even if selection row is hidden', function() {
-				view.$el.find('tr#addMountPoint').hide();
 				selectBackend('\\OC\\TestBackend');
+				view.$el.find('tr#addMountPoint').hide();
 				expect(view.$el.find('tr:first').is(':visible')).toBe(true);
 				expect(view.$el.find('tr#addMountPoint').is(':visible')).toBe(false);
 			});
@@ -217,8 +196,8 @@ describe('OCA.Files_External.Settings tests', function() {
 			var $tr;
 
 			beforeEach(function() {
-				$tr = view.$el.find('tr:first');
 				selectBackend('\\OC\\TestBackend');
+				$tr = view.$el.find('tr:first');
 			});
 			it('saves storage after clicking the save button', function() {
 				var $field1 = $tr.find('input[data-parameter=field1]');
@@ -255,6 +234,59 @@ describe('OCA.Files_External.Settings tests', function() {
 
 				// TODO: respond and check data-id
 			});
+			it('saves storage with applicable users', function() {
+				var $field1 = $tr.find('input[data-parameter=field1]');
+				expect($field1.length).toEqual(1);
+				$field1.val('test');
+				$field1.trigger(new $.Event('keyup', {keyCode: 97}));
+
+				$tr.find('.applicableToAllUsers').prop('checked', false).trigger('change');
+				select2ApplicableUsers = ['user1', 'user2', 'group1(group)', 'group2(group)'];
+
+				var $saveButton = $tr.find('td.save .icon-checkmark');
+				$saveButton.click();
+
+				expect(fakeServer.requests.length).toEqual(1);
+				var request = fakeServer.requests[0];
+				expect(request.url).toEqual(OC.getRootPath() + '/index.php/apps/files_external/globalstorages');
+				expect(JSON.parse(request.requestBody)).toEqual({
+					backend: '\\OC\\TestBackend',
+					authMechanism: 'mechanism1',
+					backendOptions: {
+						'field1': 'test',
+						'field2': ''
+					},
+					mountPoint: 'TestBackend',
+					priority: 11,
+					applicableUsers: ['user1', 'user2'],
+					applicableGroups: ['group1', 'group2'],
+					mountOptions: {
+						encrypt: true,
+						previews: true,
+						enable_sharing: false,
+						filesystem_check_changes: 1,
+						encoding_compatibility: false,
+						readonly: false,
+					},
+					testOnly: true
+				});
+
+				// TODO: respond and check data-id
+			});
+			it('does not saves storage without applicable users and unchecked all users checkbox', function() {
+				var $field1 = $tr.find('input[data-parameter=field1]');
+				expect($field1.length).toEqual(1);
+				$field1.val('test');
+				$field1.trigger(new $.Event('keyup', {keyCode: 97}));
+
+				$tr.find('.applicableToAllUsers').prop('checked', false).trigger('change');
+
+				var $saveButton = $tr.find('td.save .icon-checkmark');
+				$saveButton.click();
+
+				expect(fakeServer.requests.length).toEqual(0);
+			});
+
 			it('saves storage after closing mount options popovermenu', function() {
 				$tr.find('.mountOptionsToggle .icon-more').click();
 				$tr.find('[name=previews]').trigger(new $.Event('keyup', {keyCode: 97}));
@@ -274,11 +306,21 @@ describe('OCA.Files_External.Settings tests', function() {
 			var $tr;
 
 			beforeEach(function() {
-				$tr = view.$el.find('tr:first');
 				selectBackend('\\OC\\InputsTestBackend');
+				$tr = view.$el.find('tr:first');
 			});
 
 			it('lists missing fields in storage errors', function() {
+				$tr.find('.applicableToAllUsers').prop('checked', false).trigger('change');
+				var storage = view.getStorageConfig($tr);
+
+				expect(storage.errors).toEqual({
+					backendOptions: ['field_text', 'field_password'],
+					requiredApplicable: true,
+				});
+			});
+
+			it('does not list applicable when all users checkbox is ticked', function() {
 				var storage = view.getStorageConfig($tr);
 
 				expect(storage.errors).toEqual({
@@ -342,9 +384,9 @@ describe('OCA.Files_External.Settings tests', function() {
 			var $td;
 
 			beforeEach(function() {
+				selectBackend('\\OC\\TestBackend');
 				$tr = view.$el.find('tr:first');
 				$td = $tr.find('.mountOptionsToggle');
-				selectBackend('\\OC\\TestBackend');
 			});
 
 			it('shows popovermenu when clicking on toggle button, hides when clicking outside', function() {
@@ -398,9 +440,6 @@ describe('OCA.Files_External.Settings tests', function() {
 				});
 			});
 		});
-	});
-	describe('applicable user list', function() {
-		// TODO: test select2 retrieval logic
 	});
 	describe('allow user mounts section', function() {
 		// TODO: test allowUserMounting section

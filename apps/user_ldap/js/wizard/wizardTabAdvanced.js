@@ -1,8 +1,7 @@
-
 /**
- * Copyright (c) 2015, Arthur Schiwon <blizzz@owncloud.com>
- * This file is licensed under the Affero General Public License version 3 or later.
- * See the COPYING-README file.
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 OCA = OCA || {};
@@ -17,8 +16,8 @@ OCA = OCA || {};
 		/**
 		 * initializes the instance. Always call it after initialization.
 		 *
-		 * @param tabIndex
-		 * @param tabID
+		 * @param {any} tabIndex -
+		 * @param {any} tabID -
 		 */
 		init: function (tabIndex, tabID) {
 			this._super(tabIndex, tabID);
@@ -66,6 +65,10 @@ OCA = OCA || {};
 				ldap_attributes_for_user_search: {
 					$element: $('#ldap_attributes_for_user_search'),
 					setMethod: 'setSearchAttributesUsers'
+				},
+				ldap_mark_remnants_as_disabled: {
+					$element: $('#ldap_mark_remnants_as_disabled'),
+					setMethod: 'setMarkRemnantsAsDisabled'
 				},
 				ldap_group_display_name: {
 					$element: $('#ldap_group_display_name'),
@@ -124,6 +127,48 @@ OCA = OCA || {};
 				ldap_ext_storage_home_attribute: {
 					$element: $('#ldap_ext_storage_home_attribute'),
 					setMethod: 'setExternalStorageHomeAttribute'
+				},
+
+				//User Profile Attributes
+				ldap_attr_phone: {
+					$element: $('#ldap_attr_phone'),
+					setMethod: 'setPhoneAttribute'
+				},
+				ldap_attr_website: {
+					$element: $('#ldap_attr_website'),
+					setMethod: 'setWebsiteAttribute'
+				},
+				ldap_attr_address: {
+					$element: $('#ldap_attr_address'),
+					setMethod: 'setAddressAttribute'
+				},
+				ldap_attr_twitter: {
+					$element: $('#ldap_attr_twitter'),
+					setMethod: 'setTwitterAttribute'
+				},
+				ldap_attr_fediverse: {
+					$element: $('#ldap_attr_fediverse'),
+					setMethod: 'setFediverseAttribute'
+				},
+				ldap_attr_organisation: {
+					$element: $('#ldap_attr_organisation'),
+					setMethod: 'setOrganisationAttribute'
+				},
+				ldap_attr_role: {
+					$element: $('#ldap_attr_role'),
+					setMethod: 'setRoleAttribute'
+				},
+				ldap_attr_headline: {
+					$element: $('#ldap_attr_headline'),
+					setMethod: 'setHeadlineAttribute'
+				},
+				ldap_attr_biography: {
+					$element: $('#ldap_attr_biography'),
+					setMethod: 'setBiographyAttribute'
+				},
+				ldap_attr_birthdate: {
+					$element: $('#ldap_attr_birthdate'),
+					setMethod: 'setBirthdateAttribute'
 				},
 			};
 			this.setManagedItems(items);
@@ -238,6 +283,15 @@ OCA = OCA || {};
 		},
 
 		/**
+		 * enables or disables marking remnants as disabled
+		 *
+		 * @param {string} markRemnantsAsDisabled contains an int
+		 */
+		setMarkRemnantsAsDisabled: function(markRemnantsAsDisabled) {
+			this.setElementValue(this.managedItems.ldap_mark_remnants_as_disabled.$element, markRemnantsAsDisabled);
+		},
+
+		/**
 		 * sets the display name attribute for groups
 		 *
 		 * @param {string} attribute
@@ -281,7 +335,7 @@ OCA = OCA || {};
 		setDynamicGroupMemberURL: function(attribute) {
 			this.setElementValue(this.managedItems.ldap_dynamic_group_member_url.$element, attribute);
 		},
-                
+
 		/**
 		 * enabled or disables the use of nested groups (groups in groups in
 		 * groups…)
@@ -364,6 +418,96 @@ OCA = OCA || {};
 		 */
 		setHomeFolderAttribute: function(attribute) {
 			this.setElementValue(this.managedItems.home_folder_naming_rule.$element, attribute);
+		},
+
+		/**
+		 * sets the attribute for the Nextcloud user profile phone Number
+		 *
+		 * @param {string} attribute
+		 */
+		setPhoneAttribute: function(attribute) {
+			this.setElementValue(this.managedItems.ldap_attr_phone.$element, attribute);
+		},
+
+		/**
+		 * sets the attribute for the Nextcloud user profile website
+		 *
+		 * @param {string} attribute
+		 */
+		setWebsiteAttribute: function(attribute) {
+			this.setElementValue(this.managedItems.ldap_attr_website.$element, attribute);
+		},
+
+		/**
+		 * sets the attribute for the Nextcloud user profile postal address
+		 *
+		 * @param {string} attribute
+		 */
+		setAddressAttribute: function(attribute) {
+			this.setElementValue(this.managedItems.ldap_attr_address.$element, attribute);
+		},
+
+		/**
+		 * sets the attribute for the Nextcloud user profile twitter
+		 *
+		 * @param {string} attribute
+		 */
+		setTwitterAttribute: function(attribute) {
+			this.setElementValue(this.managedItems.ldap_attr_twitter.$element, attribute);
+		},
+
+		/**
+		 * sets the attribute for the Nextcloud user profile fediverse
+		 *
+		 * @param {string} attribute
+		 */
+		setFediverseAttribute: function(attribute) {
+			this.setElementValue(this.managedItems.ldap_attr_fediverse.$element, attribute);
+		},
+
+		/**
+		 * sets the attribute for the Nextcloud user profile organisation
+		 *
+		 * @param {string} attribute
+		 */
+		setOrganisationAttribute: function(attribute) {
+			this.setElementValue(this.managedItems.ldap_attr_organisation.$element, attribute);
+		},
+
+		/**
+		 * sets the attribute for the Nextcloud user profile role
+		 *
+		 * @param {string} attribute
+		 */
+		setRoleAttribute: function(attribute) {
+			this.setElementValue(this.managedItems.ldap_attr_role.$element, attribute);
+		},
+
+		/**
+		 * sets the attribute for the Nextcloud user profile headline
+		 *
+		 * @param {string} attribute
+		 */
+		setHeadlineAttribute: function(attribute) {
+			this.setElementValue(this.managedItems.ldap_attr_headline.$element, attribute);
+		},
+
+		/**
+		 * sets the attribute for the Nextcloud user profile biography
+		 *
+		 * @param {string} attribute
+		 */
+		setBiographyAttribute: function(attribute) {
+			this.setElementValue(this.managedItems.ldap_attr_biography.$element, attribute);
+		},
+
+		/**
+		 * sets the attribute for the Nextcloud user profile birthday
+		 *
+		 * @param {string} attribute
+		 */
+		setBirthdateAttribute: function(attribute) {
+			this.setElementValue(this.managedItems.ldap_attr_birthdate.$element, attribute);
 		},
 
 		/**

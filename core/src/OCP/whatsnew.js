@@ -1,30 +1,15 @@
 /**
- * @copyright (c) 2017 Arthur Schiwon <blizzz@arthur-schiwon.de>
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author John Molakvoæ <skjnldsv@protonmail.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2017 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 import _ from 'underscore'
 import $ from 'jquery'
 import { generateOcsUrl } from '@nextcloud/router'
 
+/**
+ * @param {any} options -
+ */
 export function query(options) {
 	options = options || {}
 	const dismissOptions = options.dismiss || {}
@@ -38,6 +23,10 @@ export function query(options) {
 	})
 }
 
+/**
+ * @param {any} version -
+ * @param {any} options -
+ */
 export function dismiss(version, options) {
 	options = options || {}
 	$.ajax({
@@ -51,6 +40,12 @@ export function dismiss(version, options) {
 	$('.whatsNewPopover').remove()
 }
 
+/**
+ * @param {any} data -
+ * @param {any} statusText -
+ * @param {any} xhr -
+ * @param {any} dismissOptions -
+ */
 function onQuerySuccess(data, statusText, xhr, dismissOptions) {
 	console.debug('querying Whats New data was successful: ' + statusText)
 	console.debug(data)
@@ -131,15 +126,26 @@ function onQuerySuccess(data, statusText, xhr, dismissOptions) {
 	document.body.appendChild(div)
 }
 
+/**
+ * @param {any} x -
+ * @param {any} t -
+ * @param {any} e -
+ */
 function onQueryError(x, t, e) {
 	console.debug('querying Whats New Data resulted in an error: ' + t + e)
 	console.debug(x)
 }
 
+/**
+ * @param {any} data -
+ */
 function onDismissSuccess(data) {
 	// noop
 }
 
+/**
+ * @param {any} data -
+ */
 function onDismissError(data) {
 	console.debug('dismissing Whats New data resulted in an error: ' + data)
 }

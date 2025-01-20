@@ -1,59 +1,38 @@
 <?php
 /**
- * @copyright Copyright (c) 2016 Bjoern Schiessle <bjoern@schiessle.org>
- * @copyright Copyright (c) 2016 Lukas Reschke <lukas@statuscode.ch>
- *
- * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
- * @author Bjoern Schiessle <bjoern@schiessle.org>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Daniel Calviño Sánchez <danxuliu@gmail.com>
- * @author Jan-Christoph Borchardt <hey@jancborchardt.net>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Julius Haertl <jus@bitgrid.net>
- * @author Julius Härtl <jus@bitgrid.net>
- * @author Kyle Fazzari <kyrofa@ubuntu.com>
- * @author Lukas Reschke <lukas@statuscode.ch>
- * @author nhirokinet <nhirokinet@nhiroki.net>
- * @author rakekniven <mark.ziegler@rakekniven.de>
- * @author Robin Appelman <robin@icewind.nl>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Thomas Citharel <nextcloud@tcit.fr>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2016 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 namespace OCA\Theming\Controller;
 
-use OC\Template\SCSSCacher;
+use InvalidArgumentException;
 use OCA\Theming\ImageManager;
+use OCA\Theming\Service\ThemesService;
+use OCA\Theming\Settings\Admin;
 use OCA\Theming\ThemingDefaults;
 use OCP\App\IAppManager;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\AuthorizedAdminSetting;
+use OCP\AppFramework\Http\Attribute\BruteForceProtection;
+use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
+use OCP\AppFramework\Http\Attribute\OpenAPI;
+use OCP\AppFramework\Http\Attribute\PublicPage;
+use OCP\AppFramework\Http\ContentSecurityPolicy;
+use OCP\AppFramework\Http\DataDisplayResponse;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\Http\FileDisplayResponse;
+use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\NotFoundResponse;
-use OCP\Files\IAppData;
+use OCP\AppFramework\Services\IAppConfig;
 use OCP\Files\NotFoundException;
 use OCP\Files\NotPermittedException;
 use OCP\IConfig;
 use OCP\IL10N;
+use OCP\INavigationManager;
 use OCP\IRequest;
-use OCP\ITempManager;
 use OCP\IURLGenerator;
+use ScssPhp\ScssPhp\Compiler;
 
 /**
  * Class ThemingController
@@ -63,64 +42,22 @@ use OCP\IURLGenerator;
  * @package OCA\Theming\Controller
  */
 class ThemingController extends Controller {
-	/** @var ThemingDefaults */
-	private $themingDefaults;
-	/** @var IL10N */
-	private $l10n;
-	/** @var IConfig */
-	private $config;
-	/** @var ITempManager */
-	private $tempManager;
-	/** @var IAppData */
-	private $appData;
-	/** @var SCSSCacher */
-	private $scssCacher;
-	/** @var IURLGenerator */
-	private $urlGenerator;
-	/** @var IAppManager */
-	private $appManager;
-	/** @var ImageManager */
-	private $imageManager;
+	public const VALID_UPLOAD_KEYS = ['header', 'logo', 'logoheader', 'background', 'favicon'];
 
-	/**
-	 * ThemingController constructor.
-	 *
-	 * @param string $appName
-	 * @param IRequest $request
-	 * @param IConfig $config
-	 * @param ThemingDefaults $themingDefaults
-	 * @param IL10N $l
-	 * @param ITempManager $tempManager
-	 * @param IAppData $appData
-	 * @param SCSSCacher $scssCacher
-	 * @param IURLGenerator $urlGenerator
-	 * @param IAppManager $appManager
-	 * @param ImageManager $imageManager
-	 */
 	public function __construct(
 		$appName,
 		IRequest $request,
-		IConfig $config,
-		ThemingDefaults $themingDefaults,
-		IL10N $l,
-		ITempManager $tempManager,
-		IAppData $appData,
-		SCSSCacher $scssCacher,
-		IURLGenerator $urlGenerator,
-		IAppManager $appManager,
-		ImageManager $imageManager
+		private IConfig $config,
+		private IAppConfig $appConfig,
+		private ThemingDefaults $themingDefaults,
+		private IL10N $l10n,
+		private IURLGenerator $urlGenerator,
+		private IAppManager $appManager,
+		private ImageManager $imageManager,
+		private ThemesService $themesService,
+		private INavigationManager $navigationManager,
 	) {
 		parent::__construct($appName, $request);
-
-		$this->themingDefaults = $themingDefaults;
-		$this->l10n = $l;
-		$this->config = $config;
-		$this->tempManager = $tempManager;
-		$this->appData = $appData;
-		$this->scssCacher = $scssCacher;
-		$this->urlGenerator = $urlGenerator;
-		$this->appManager = $appManager;
-		$this->imageManager = $imageManager;
 	}
 
 	/**
@@ -129,9 +66,11 @@ class ThemingController extends Controller {
 	 * @return DataResponse
 	 * @throws NotPermittedException
 	 */
+	#[AuthorizedAdminSetting(settings: Admin::class)]
 	public function updateStylesheet($setting, $value) {
 		$value = trim($value);
 		$error = null;
+		$saved = false;
 		switch ($setting) {
 			case 'name':
 				if (strlen($value) > 250) {
@@ -167,9 +106,28 @@ class ThemingController extends Controller {
 					$error = $this->l10n->t('The given slogan is too long');
 				}
 				break;
-			case 'color':
+			case 'primary_color':
 				if (!preg_match('/^\#([0-9a-f]{3}|[0-9a-f]{6})$/i', $value)) {
 					$error = $this->l10n->t('The given color is invalid');
+				} else {
+					$this->appConfig->setAppValueString('primary_color', $value);
+					$saved = true;
+				}
+				break;
+			case 'background_color':
+				if (!preg_match('/^\#([0-9a-f]{3}|[0-9a-f]{6})$/i', $value)) {
+					$error = $this->l10n->t('The given color is invalid');
+				} else {
+					$this->appConfig->setAppValueString('background_color', $value);
+					$saved = true;
+				}
+				break;
+			case 'disable-user-theming':
+				if (!in_array($value, ['yes', 'true', 'no', 'false'])) {
+					$error = $this->l10n->t('Disable-user-theming should be true or false');
+				} else {
+					$this->appConfig->setAppValueBool('disable-user-theming', $value === 'yes' || $value === 'true');
+					$saved = true;
 				}
 				break;
 		}
@@ -182,28 +140,64 @@ class ThemingController extends Controller {
 			], Http::STATUS_BAD_REQUEST);
 		}
 
-		$this->themingDefaults->set($setting, $value);
+		if (!$saved) {
+			$this->themingDefaults->set($setting, $value);
+		}
 
-		// reprocess server scss for preview
-		$cssCached = $this->scssCacher->process(\OC::$SERVERROOT, 'core/css/css-variables.scss', 'core');
+		return new DataResponse([
+			'data' => [
+				'message' => $this->l10n->t('Saved'),
+			],
+			'status' => 'success'
+		]);
+	}
 
-		return new DataResponse(
-			[
-				'data' =>
-					[
-						'message' => $this->l10n->t('Saved'),
-						'serverCssUrl' => $this->urlGenerator->linkTo('', $this->scssCacher->getCachedSCSS('core', '/core/css/css-variables.scss'))
-					],
-				'status' => 'success'
-			]
-		);
+	/**
+	 * @param string $setting
+	 * @param mixed $value
+	 * @return DataResponse
+	 * @throws NotPermittedException
+	 */
+	#[AuthorizedAdminSetting(settings: Admin::class)]
+	public function updateAppMenu($setting, $value) {
+		$error = null;
+		switch ($setting) {
+			case 'defaultApps':
+				if (is_array($value)) {
+					try {
+						$this->navigationManager->setDefaultEntryIds($value);
+					} catch (InvalidArgumentException $e) {
+						$error = $this->l10n->t('Invalid app given');
+					}
+				} else {
+					$error = $this->l10n->t('Invalid type for setting "defaultApp" given');
+				}
+				break;
+			default:
+				$error = $this->l10n->t('Invalid setting key');
+		}
+		if ($error !== null) {
+			return new DataResponse([
+				'data' => [
+					'message' => $error,
+				],
+				'status' => 'error'
+			], Http::STATUS_BAD_REQUEST);
+		}
+
+		return new DataResponse([
+			'data' => [
+				'message' => $this->l10n->t('Saved'),
+			],
+			'status' => 'success'
+		]);
 	}
 
 	/**
 	 * Check that a string is a valid http/https url
 	 */
 	private function isValidUrl(string $url): bool {
-		return ((strpos($url, 'http://') === 0 || strpos($url, 'https://') === 0) &&
+		return ((str_starts_with($url, 'http://') || str_starts_with($url, 'https://')) &&
 			filter_var($url, FILTER_VALIDATE_URL) !== false);
 	}
 
@@ -211,8 +205,20 @@ class ThemingController extends Controller {
 	 * @return DataResponse
 	 * @throws NotPermittedException
 	 */
+	#[AuthorizedAdminSetting(settings: Admin::class)]
 	public function uploadImage(): DataResponse {
 		$key = $this->request->getParam('key');
+		if (!in_array($key, self::VALID_UPLOAD_KEYS, true)) {
+			return new DataResponse(
+				[
+					'data' => [
+						'message' => 'Invalid key'
+					],
+					'status' => 'failure',
+				],
+				Http::STATUS_BAD_REQUEST
+			);
+		}
 		$image = $this->request->getUploadedFile('image');
 		$error = null;
 		$phpFileUploadErrors = [
@@ -260,7 +266,6 @@ class ThemingController extends Controller {
 		}
 
 		$name = $image['name'];
-		$cssCached = $this->scssCacher->process(\OC::$SERVERROOT, 'core/css/css-variables.scss', 'core');
 
 		return new DataResponse(
 			[
@@ -269,7 +274,6 @@ class ThemingController extends Controller {
 						'name' => $name,
 						'url' => $this->imageManager->getImageUrl($key),
 						'message' => $this->l10n->t('Saved'),
-						'serverCssUrl' => $this->urlGenerator->linkTo('', $this->scssCacher->getCachedSCSS('core', '/core/css/css-variables.scss'))
 					],
 				'status' => 'success'
 			]
@@ -283,10 +287,9 @@ class ThemingController extends Controller {
 	 * @return DataResponse
 	 * @throws NotPermittedException
 	 */
+	#[AuthorizedAdminSetting(settings: Admin::class)]
 	public function undo(string $setting): DataResponse {
 		$value = $this->themingDefaults->undo($setting);
-		// reprocess server scss for preview
-		$cssCached = $this->scssCacher->process(\OC::$SERVERROOT, 'core/css/css-variables.scss', 'core');
 
 		return new DataResponse(
 			[
@@ -294,7 +297,6 @@ class ThemingController extends Controller {
 					[
 						'value' => $value,
 						'message' => $this->l10n->t('Saved'),
-						'serverCssUrl' => $this->urlGenerator->linkTo('', $this->scssCacher->getCachedSCSS('core', '/core/css/css-variables.scss'))
 					],
 				'status' => 'success'
 			]
@@ -302,14 +304,43 @@ class ThemingController extends Controller {
 	}
 
 	/**
-	 * @PublicPage
-	 * @NoCSRFRequired
+	 * Revert all theming settings to their default values
 	 *
-	 * @param string $key
-	 * @param bool $useSvg
-	 * @return FileDisplayResponse|NotFoundResponse
+	 * @return DataResponse
 	 * @throws NotPermittedException
 	 */
+	#[AuthorizedAdminSetting(settings: Admin::class)]
+	public function undoAll(): DataResponse {
+		$this->themingDefaults->undoAll();
+		$this->navigationManager->setDefaultEntryIds([]);
+
+		return new DataResponse(
+			[
+				'data' =>
+					[
+						'message' => $this->l10n->t('Saved'),
+					],
+				'status' => 'success'
+			]
+		);
+	}
+
+	/**
+	 * @NoSameSiteCookieRequired
+	 *
+	 * Get an image
+	 *
+	 * @param string $key Key of the image
+	 * @param bool $useSvg Return image as SVG
+	 * @return FileDisplayResponse<Http::STATUS_OK, array{}>|NotFoundResponse<Http::STATUS_NOT_FOUND, array{}>
+	 * @throws NotPermittedException
+	 *
+	 * 200: Image returned
+	 * 404: Image not found
+	 */
+	#[PublicPage]
+	#[NoCSRFRequired]
+	#[OpenAPI(scope: OpenAPI::SCOPE_DEFAULT)]
 	public function getImage(string $key, bool $useSvg = true) {
 		try {
 			$file = $this->imageManager->getImage($key, $useSvg);
@@ -318,7 +349,7 @@ class ThemingController extends Controller {
 		}
 
 		$response = new FileDisplayResponse($file);
-		$csp = new Http\ContentSecurityPolicy();
+		$csp = new ContentSecurityPolicy();
 		$csp->allowInlineStyle();
 		$response->setContentSecurityPolicy($csp);
 		$response->cacheFor(3600);
@@ -333,30 +364,50 @@ class ThemingController extends Controller {
 	}
 
 	/**
-	 * @NoCSRFRequired
-	 * @PublicPage
 	 * @NoSameSiteCookieRequired
+	 * @NoTwoFactorRequired
 	 *
-	 * @return FileDisplayResponse|NotFoundResponse
-	 * @throws NotPermittedException
-	 * @throws \Exception
-	 * @throws \OCP\App\AppPathNotFoundException
+	 * Get the CSS stylesheet for a theme
+	 *
+	 * @param string $themeId ID of the theme
+	 * @param bool $plain Let the browser decide the CSS priority
+	 * @param bool $withCustomCss Include custom CSS
+	 * @return DataDisplayResponse<Http::STATUS_OK, array{Content-Type: 'text/css'}>|NotFoundResponse<Http::STATUS_NOT_FOUND, array{}>
+	 *
+	 * 200: Stylesheet returned
+	 * 404: Theme not found
 	 */
-	public function getStylesheet() {
-		$appPath = $this->appManager->getAppPath('theming');
-
-		/* SCSSCacher is required here
-		 * We cannot rely on automatic caching done by \OC_Util::addStyle,
-		 * since we need to add the cacheBuster value to the url
-		 */
-		$cssCached = $this->scssCacher->process($appPath, 'css/theming.scss', 'theming');
-		if (!$cssCached) {
+	#[PublicPage]
+	#[NoCSRFRequired]
+	#[OpenAPI(scope: OpenAPI::SCOPE_DEFAULT)]
+	public function getThemeStylesheet(string $themeId, bool $plain = false, bool $withCustomCss = false) {
+		$themes = $this->themesService->getThemes();
+		if (!in_array($themeId, array_keys($themes))) {
 			return new NotFoundResponse();
 		}
 
+		$theme = $themes[$themeId];
+		$customCss = $theme->getCustomCss();
+
+		// Generate variables
+		$variables = '';
+		foreach ($theme->getCSSVariables() as $variable => $value) {
+			$variables .= "$variable:$value; ";
+		};
+
+		// If plain is set, the browser decides of the css priority
+		if ($plain) {
+			$css = ":root { $variables } " . $customCss;
+		} else {
+			// If not set, we'll rely on the body class
+			$compiler = new Compiler();
+			$compiledCss = $compiler->compileString("[data-theme-$themeId] { $variables $customCss }");
+			$css = $compiledCss->getCss();
+			;
+		}
+
 		try {
-			$cssFile = $this->scssCacher->getCachedCSS('theming', 'theming.css');
-			$response = new FileDisplayResponse($cssFile, Http::STATUS_OK, ['Content-Type' => 'text/css']);
+			$response = new DataDisplayResponse($css, Http::STATUS_OK, ['Content-Type' => 'text/css']);
 			$response->cacheFor(86400);
 			return $response;
 		} catch (NotFoundException $e) {
@@ -365,12 +416,20 @@ class ThemingController extends Controller {
 	}
 
 	/**
-	 * @NoCSRFRequired
-	 * @PublicPage
+	 * Get the manifest for an app
 	 *
-	 * @return Http\JSONResponse
+	 * @param string $app ID of the app
+	 * @psalm-suppress LessSpecificReturnStatement The content of the Manifest doesn't need to be described in the return type
+	 * @return JSONResponse<Http::STATUS_OK, array{name: string, short_name: string, start_url: string, theme_color: string, background_color: string, description: string, icons: list<array{src: non-empty-string, type: string, sizes: string}>, display: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{}, array{}>
+	 *
+	 * 200: Manifest returned
+	 * 404: App not found
 	 */
-	public function getManifest($app) {
+	#[PublicPage]
+	#[NoCSRFRequired]
+	#[BruteForceProtection(action: 'manifest')]
+	#[OpenAPI(scope: OpenAPI::SCOPE_DEFAULT)]
+	public function getManifest(string $app): JSONResponse {
 		$cacheBusterValue = $this->config->getAppValue('theming', 'cachebuster', '0');
 		if ($app === 'core' || $app === 'settings') {
 			$name = $this->themingDefaults->getName();
@@ -378,16 +437,26 @@ class ThemingController extends Controller {
 			$startUrl = $this->urlGenerator->getBaseUrl();
 			$description = $this->themingDefaults->getSlogan();
 		} else {
-			$info = $this->appManager->getAppInfo($app);
+			if (!$this->appManager->isEnabledForUser($app)) {
+				$response = new JSONResponse([], Http::STATUS_NOT_FOUND);
+				$response->throttle(['action' => 'manifest', 'app' => $app]);
+				return $response;
+			}
+
+			$info = $this->appManager->getAppInfo($app, false, $this->l10n->getLanguageCode());
 			$name = $info['name'] . ' - ' . $this->themingDefaults->getName();
 			$shortName = $info['name'];
-			if (strpos($this->request->getRequestUri(), '/index.php/') !== false) {
+			if (str_contains($this->request->getRequestUri(), '/index.php/')) {
 				$startUrl = $this->urlGenerator->getBaseUrl() . '/index.php/apps/' . $app . '/';
 			} else {
 				$startUrl = $this->urlGenerator->getBaseUrl() . '/apps/' . $app . '/';
 			}
-			$description = $info['summary'];
+			$description = $info['summary'] ?? '';
 		}
+		/**
+		 * @var string $description
+		 * @var string $shortName
+		 */
 		$responseJS = [
 			'name' => $name,
 			'short_name' => $shortName,
@@ -399,20 +468,20 @@ class ThemingController extends Controller {
 				[
 					[
 						'src' => $this->urlGenerator->linkToRoute('theming.Icon.getTouchIcon',
-								['app' => $app]) . '?v=' . $cacheBusterValue,
+							['app' => $app]) . '?v=' . $cacheBusterValue,
 						'type' => 'image/png',
 						'sizes' => '512x512'
 					],
 					[
 						'src' => $this->urlGenerator->linkToRoute('theming.Icon.getFavicon',
-								['app' => $app]) . '?v=' . $cacheBusterValue,
+							['app' => $app]) . '?v=' . $cacheBusterValue,
 						'type' => 'image/svg+xml',
 						'sizes' => '16x16'
 					]
 				],
 			'display' => 'standalone'
 		];
-		$response = new Http\JSONResponse($responseJS);
+		$response = new JSONResponse($responseJS);
 		$response->cacheFor(3600);
 		return $response;
 	}

@@ -3,26 +3,8 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2018, Michael Weimann <mail@michael-weimann.eu>
- *
- * @author Michael Weimann <mail@michael-weimann.eu>
- * @author Morris Jobke <hey@morrisjobke.de>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2018 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 namespace OCP\Files\SimpleFS;
 
@@ -36,17 +18,13 @@ use OCP\Files\NotPermittedException;
 class InMemoryFile implements ISimpleFile {
 	/**
 	 * Holds the file name.
-	 *
-	 * @var string
 	 */
-	private $name;
+	private string $name;
 
 	/**
 	 * Holds the file contents.
-	 *
-	 * @var string
 	 */
-	private $contents;
+	private string $contents;
 
 	/**
 	 * InMemoryFile constructor.
@@ -64,7 +42,7 @@ class InMemoryFile implements ISimpleFile {
 	 * @inheritdoc
 	 * @since 16.0.0
 	 */
-	public function getName() {
+	public function getName(): string {
 		return $this->name;
 	}
 
@@ -72,7 +50,7 @@ class InMemoryFile implements ISimpleFile {
 	 * @inheritdoc
 	 * @since 16.0.0
 	 */
-	public function getSize() {
+	public function getSize(): int|float {
 		return strlen($this->contents);
 	}
 
@@ -80,7 +58,7 @@ class InMemoryFile implements ISimpleFile {
 	 * @inheritdoc
 	 * @since 16.0.0
 	 */
-	public function getETag() {
+	public function getETag(): string {
 		return '';
 	}
 
@@ -88,7 +66,7 @@ class InMemoryFile implements ISimpleFile {
 	 * @inheritdoc
 	 * @since 16.0.0
 	 */
-	public function getMTime() {
+	public function getMTime(): int {
 		return time();
 	}
 
@@ -96,7 +74,7 @@ class InMemoryFile implements ISimpleFile {
 	 * @inheritdoc
 	 * @since 16.0.0
 	 */
-	public function getContent() {
+	public function getContent(): string {
 		return $this->contents;
 	}
 
@@ -104,7 +82,7 @@ class InMemoryFile implements ISimpleFile {
 	 * @inheritdoc
 	 * @since 16.0.0
 	 */
-	public function putContent($data) {
+	public function putContent($data): void {
 		$this->contents = $data;
 	}
 
@@ -113,7 +91,7 @@ class InMemoryFile implements ISimpleFile {
 	 *
 	 * @since 16.0.0
 	 */
-	public function delete() {
+	public function delete(): void {
 		// unimplemented for in memory files
 	}
 
@@ -121,9 +99,17 @@ class InMemoryFile implements ISimpleFile {
 	 * @inheritdoc
 	 * @since 16.0.0
 	 */
-	public function getMimeType() {
+	public function getMimeType(): string {
 		$fileInfo = new \finfo(FILEINFO_MIME_TYPE);
 		return $fileInfo->buffer($this->contents);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @since 24.0.0
+	 */
+	public function getExtension(): string {
+		return \pathinfo($this->name, PATHINFO_EXTENSION);
 	}
 
 	/**

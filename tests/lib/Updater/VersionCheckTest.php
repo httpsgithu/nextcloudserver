@@ -1,50 +1,60 @@
 <?php
 /**
- * @author Lukas Reschke <lukas@owncloud.com>
- * @author Victor Dubiniuk <dubiniuk@owncloud.com>
- *
- * @copyright Copyright (c) 2015, ownCloud, Inc.
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 
 namespace Test\Updater;
 
 use OC\Updater\VersionCheck;
 use OCP\Http\Client\IClientService;
+use OCP\IAppConfig;
 use OCP\IConfig;
-use OCP\Util;
+use OCP\IUserManager;
+use OCP\ServerVersion;
+use OCP\Support\Subscription\IRegistry;
+use Psr\Log\LoggerInterface;
 
 class VersionCheckTest extends \Test\TestCase {
+	/** @var ServerVersion|\PHPUnit\Framework\MockObject\MockObject */
+	private $serverVersion;
 	/** @var IConfig| \PHPUnit\Framework\MockObject\MockObject */
 	private $config;
-	/** @var VersionCheck | \PHPUnit\Framework\MockObject\MockObject*/
+	/** @var IAppConfig| \PHPUnit\Framework\MockObject\MockObject */
+	private $appConfig;
+	/** @var VersionCheck | \PHPUnit\Framework\MockObject\MockObject */
 	private $updater;
+	/** @var IRegistry | \PHPUnit\Framework\Mo2ckObject\MockObject */
+	private $registry;
+	/** @var LoggerInterface | \PHPUnit\Framework\Mo2ckObject\MockObject */
+	private $logger;
 
 	protected function setUp(): void {
 		parent::setUp();
-		$this->config = $this->getMockBuilder(IConfig::class)
-			->disableOriginalConstructor()
-			->getMock();
-		$clientService = $this->getMockBuilder(IClientService::class)
-			->disableOriginalConstructor()
-			->getMock();
+		$this->serverVersion = $this->createMock(ServerVersion::class);
+		$this->config = $this->createMock(IConfig::class);
+		$this->appConfig = $this->createMock(IAppConfig::class);
+		$clientService = $this->createMock(IClientService::class);
 
+		$this->serverVersion->method('getChannel')->willReturn('git');
+
+		$this->registry = $this->createMock(IRegistry::class);
+		$this->registry
+			->method('delegateHasValidSubscription')
+			->willReturn(false);
+		$this->logger = $this->createMock(LoggerInterface::class);
 		$this->updater = $this->getMockBuilder(VersionCheck::class)
 			->setMethods(['getUrlContent'])
-			->setConstructorArgs([$clientService, $this->config])
+			->setConstructorArgs([
+				$this->serverVersion,
+				$clientService,
+				$this->config,
+				$this->appConfig,
+				$this->createMock(IUserManager::class),
+				$this->registry,
+				$this->logger,
+			])
 			->getMock();
 	}
 
@@ -53,10 +63,11 @@ class VersionCheckTest extends \Test\TestCase {
 	 * @return string
 	 */
 	private function buildUpdateUrl($baseUrl) {
-		return $baseUrl . '?version='.implode('x', Util::getVersion()).'xinstalledatxlastupdatedatx'.\OC_Util::getChannel().'xxx'.PHP_MAJOR_VERSION.'x'.PHP_MINOR_VERSION.'x'.PHP_RELEASE_VERSION;
+		$serverVersion = \OCP\Server::get(ServerVersion::class);
+		return $baseUrl . '?version=' . implode('x', $serverVersion->getVersion()) . 'xinstalledatx' . time() . 'x' . $serverVersion->getChannel() . 'xxx' . PHP_MAJOR_VERSION . 'x' . PHP_MINOR_VERSION . 'x' . PHP_RELEASE_VERSION . 'x0x0';
 	}
 
-	public function testCheckInCache() {
+	public function testCheckInCache(): void {
 		$expectedResult = [
 			'version' => '8.0.4.2',
 			'versionstring' => 'ownCloud 8.0.4',
@@ -66,17 +77,17 @@ class VersionCheckTest extends \Test\TestCase {
 		];
 
 		$this->config
-			->expects($this->at(0))
+			->expects($this->once())
 			->method('getSystemValueBool')
 			->with('has_internet_connection', true)
 			->willReturn(true);
-		$this->config
-			->expects($this->at(1))
-			->method('getAppValue')
+		$this->appConfig
+			->expects($this->once())
+			->method('getValueInt')
 			->with('core', 'lastupdatedat')
 			->willReturn(time());
 		$this->config
-			->expects($this->at(2))
+			->expects($this->once())
 			->method('getAppValue')
 			->with('core', 'lastupdateResult')
 			->willReturn(json_encode($expectedResult));
@@ -84,7 +95,7 @@ class VersionCheckTest extends \Test\TestCase {
 		$this->assertSame($expectedResult, $this->updater->check());
 	}
 
-	public function testCheckWithoutUpdateUrl() {
+	public function testCheckWithoutUpdateUrl(): void {
 		$expectedResult = [
 			'version' => '8.0.4.2',
 			'versionstring' => 'ownCloud 8.0.4',
@@ -96,36 +107,34 @@ class VersionCheckTest extends \Test\TestCase {
 		];
 
 		$this->config
-			->expects($this->at(0))
+			->expects($this->once())
 			->method('getSystemValueBool')
 			->with('has_internet_connection', true)
 			->willReturn(true);
-		$this->config
-			->expects($this->at(1))
-			->method('getAppValue')
+		$this->appConfig
+			->expects($this->exactly(2))
+			->method('getValueInt')
 			->with('core', 'lastupdatedat')
-			->willReturn(0);
+			->willReturnOnConsecutiveCalls(
+				0,
+				time(),
+			);
 		$this->config
-			->expects($this->at(2))
-			->method('getSystemValue')
-			->with('updater.server.url', 'https://updates.nextcloud.com/updater_server/')
-			->willReturnArgument(1);
-		$this->config
-			->expects($this->at(3))
-			->method('setAppValue')
-			->with('core', 'lastupdatedat', $this->isType('integer'));
-		$this->config
-			->expects($this->at(5))
+			->expects($this->exactly(2))
 			->method('getAppValue')
 			->with('core', 'installedat')
 			->willReturn('installedat');
 		$this->config
-			->expects($this->at(6))
-			->method('getAppValue')
-			->with('core', 'lastupdatedat')
-			->willReturn('lastupdatedat');
+			->expects($this->once())
+			->method('getSystemValueString')
+			->with('updater.server.url', 'https://updates.nextcloud.com/updater_server/')
+			->willReturnArgument(1);
+		$this->appConfig
+			->expects($this->once())
+			->method('setValueInt')
+			->with('core', 'lastupdatedat', time());
 		$this->config
-			->expects($this->at(7))
+			->expects($this->once())
 			->method('setAppValue')
 			->with('core', 'lastupdateResult', json_encode($expectedResult));
 
@@ -147,40 +156,38 @@ class VersionCheckTest extends \Test\TestCase {
 		$this->assertSame($expectedResult, $this->updater->check());
 	}
 
-	public function testCheckWithInvalidXml() {
+	public function testCheckWithInvalidXml(): void {
 		$this->config
-			->expects($this->at(0))
+			->expects($this->once())
 			->method('getSystemValueBool')
 			->with('has_internet_connection', true)
 			->willReturn(true);
-		$this->config
-			->expects($this->at(1))
-			->method('getAppValue')
+		$this->appConfig
+			->expects($this->exactly(2))
+			->method('getValueInt')
 			->with('core', 'lastupdatedat')
-			->willReturn(0);
+			->willReturnOnConsecutiveCalls(
+				0,
+				time(),
+			);
 		$this->config
-			->expects($this->at(2))
-			->method('getSystemValue')
-			->with('updater.server.url', 'https://updates.nextcloud.com/updater_server/')
-			->willReturnArgument(1);
-		$this->config
-			->expects($this->at(3))
-			->method('setAppValue')
-			->with('core', 'lastupdatedat', $this->isType('integer'));
-		$this->config
-			->expects($this->at(5))
+			->expects($this->exactly(2))
 			->method('getAppValue')
 			->with('core', 'installedat')
 			->willReturn('installedat');
 		$this->config
-			->expects($this->at(6))
-			->method('getAppValue')
-			->with('core', 'lastupdatedat')
-			->willReturn('lastupdatedat');
+			->expects($this->once())
+			->method('getSystemValueString')
+			->with('updater.server.url', 'https://updates.nextcloud.com/updater_server/')
+			->willReturnArgument(1);
+		$this->appConfig
+			->expects($this->once())
+			->method('setValueInt')
+			->with('core', 'lastupdatedat', time());
 		$this->config
-			->expects($this->at(7))
+			->expects($this->once())
 			->method('setAppValue')
-			->with('core', 'lastupdateResult', '[]');
+			->with('core', 'lastupdateResult', $this->isType('string'));
 
 		$updateXml = 'Invalid XML Response!';
 		$this->updater
@@ -192,7 +199,7 @@ class VersionCheckTest extends \Test\TestCase {
 		$this->assertSame([], $this->updater->check());
 	}
 
-	public function testCheckWithEmptyValidXmlResponse() {
+	public function testCheckWithEmptyValidXmlResponse(): void {
 		$expectedResult = [
 			'version' => '',
 			'versionstring' => '',
@@ -204,34 +211,36 @@ class VersionCheckTest extends \Test\TestCase {
 		];
 
 		$this->config
-			->expects($this->at(0))
+			->expects($this->once())
 			->method('getSystemValueBool')
 			->with('has_internet_connection', true)
 			->willReturn(true);
-		$this->config
-			->expects($this->at(1))
-			->method('getAppValue')
+		$this->appConfig
+			->expects($this->exactly(2))
+			->method('getValueInt')
 			->with('core', 'lastupdatedat')
-			->willReturn(0);
+			->willReturnOnConsecutiveCalls(
+				0,
+				time(),
+			);
 		$this->config
-			->expects($this->at(2))
-			->method('getSystemValue')
-			->with('updater.server.url', 'https://updates.nextcloud.com/updater_server/')
-			->willReturnArgument(1);
-		$this->config
-			->expects($this->at(3))
-			->method('setAppValue')
-			->with('core', 'lastupdatedat', $this->isType('integer'));
-		$this->config
-			->expects($this->at(5))
+			->expects($this->exactly(2))
 			->method('getAppValue')
 			->with('core', 'installedat')
 			->willReturn('installedat');
 		$this->config
-			->expects($this->at(6))
-			->method('getAppValue')
-			->with('core', 'lastupdatedat')
-			->willReturn('lastupdatedat');
+			->expects($this->once())
+			->method('getSystemValueString')
+			->with('updater.server.url', 'https://updates.nextcloud.com/updater_server/')
+			->willReturnArgument(1);
+		$this->appConfig
+			->expects($this->once())
+			->method('setValueInt')
+			->with('core', 'lastupdatedat', time());
+		$this->config
+			->expects($this->once())
+			->method('setAppValue')
+			->with('core', 'lastupdateResult', $this->isType('string'));
 
 		$updateXml = '<?xml version="1.0"?>
 <owncloud>
@@ -250,42 +259,40 @@ class VersionCheckTest extends \Test\TestCase {
 		$this->assertSame($expectedResult, $this->updater->check());
 	}
 
-	public function testCheckWithEmptyInvalidXmlResponse() {
+	public function testCheckWithEmptyInvalidXmlResponse(): void {
 		$expectedResult = [];
 
 		$this->config
-			->expects($this->at(0))
+			->expects($this->once())
 			->method('getSystemValueBool')
 			->with('has_internet_connection', true)
 			->willReturn(true);
-		$this->config
-			->expects($this->at(1))
-			->method('getAppValue')
+		$this->appConfig
+			->expects($this->exactly(2))
+			->method('getValueInt')
 			->with('core', 'lastupdatedat')
-			->willReturn(0);
+			->willReturnOnConsecutiveCalls(
+				0,
+				time(),
+			);
 		$this->config
-			->expects($this->at(2))
-			->method('getSystemValue')
-			->with('updater.server.url', 'https://updates.nextcloud.com/updater_server/')
-			->willReturnArgument(1);
-		$this->config
-			->expects($this->at(3))
-			->method('setAppValue')
-			->with('core', 'lastupdatedat', $this->isType('integer'));
-		$this->config
-			->expects($this->at(5))
+			->expects($this->exactly(2))
 			->method('getAppValue')
 			->with('core', 'installedat')
 			->willReturn('installedat');
 		$this->config
-			->expects($this->at(6))
-			->method('getAppValue')
-			->with('core', 'lastupdatedat')
-			->willReturn('lastupdatedat');
+			->expects($this->once())
+			->method('getSystemValueString')
+			->with('updater.server.url', 'https://updates.nextcloud.com/updater_server/')
+			->willReturnArgument(1);
+		$this->appConfig
+			->expects($this->once())
+			->method('setValueInt')
+			->with('core', 'lastupdatedat', time());
 		$this->config
-			->expects($this->at(7))
+			->expects($this->once())
 			->method('setAppValue')
-			->with('core', 'lastupdateResult', json_encode($expectedResult));
+			->with('core', 'lastupdateResult', $this->isType('string'));
 
 		$updateXml = '';
 		$this->updater
@@ -297,7 +304,7 @@ class VersionCheckTest extends \Test\TestCase {
 		$this->assertSame($expectedResult, $this->updater->check());
 	}
 
-	public function testCheckWithMissingAttributeXmlResponse() {
+	public function testCheckWithMissingAttributeXmlResponse(): void {
 		$expectedResult = [
 			'version' => '',
 			'versionstring' => '',
@@ -309,34 +316,36 @@ class VersionCheckTest extends \Test\TestCase {
 		];
 
 		$this->config
-			->expects($this->at(0))
+			->expects($this->once())
 			->method('getSystemValueBool')
 			->with('has_internet_connection', true)
 			->willReturn(true);
-		$this->config
-			->expects($this->at(1))
-			->method('getAppValue')
+		$this->appConfig
+			->expects($this->exactly(2))
+			->method('getValueInt')
 			->with('core', 'lastupdatedat')
-			->willReturn(0);
+			->willReturnOnConsecutiveCalls(
+				0,
+				time(),
+			);
 		$this->config
-			->expects($this->at(2))
-			->method('getSystemValue')
-			->with('updater.server.url', 'https://updates.nextcloud.com/updater_server/')
-			->willReturnArgument(1);
-		$this->config
-			->expects($this->at(3))
-			->method('setAppValue')
-			->with('core', 'lastupdatedat', $this->isType('integer'));
-		$this->config
-			->expects($this->at(5))
+			->expects($this->exactly(2))
 			->method('getAppValue')
 			->with('core', 'installedat')
 			->willReturn('installedat');
 		$this->config
-			->expects($this->at(6))
-			->method('getAppValue')
-			->with('core', 'lastupdatedat')
-			->willReturn('lastupdatedat');
+			->expects($this->once())
+			->method('getSystemValueString')
+			->with('updater.server.url', 'https://updates.nextcloud.com/updater_server/')
+			->willReturnArgument(1);
+		$this->appConfig
+			->expects($this->once())
+			->method('setValueInt')
+			->with('core', 'lastupdatedat', time());
+		$this->config
+			->expects($this->once())
+			->method('setAppValue')
+			->with('core', 'lastupdateResult', $this->isType('string'));
 
 		// missing autoupdater element should still not fail
 		$updateXml = '<?xml version="1.0"?>
@@ -355,9 +364,9 @@ class VersionCheckTest extends \Test\TestCase {
 		$this->assertSame($expectedResult, $this->updater->check());
 	}
 
-	public function testNoInternet() {
+	public function testNoInternet(): void {
 		$this->config
-			->expects($this->at(0))
+			->expects($this->once())
 			->method('getSystemValueBool')
 			->with('has_internet_connection', true)
 			->willReturn(false);

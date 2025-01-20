@@ -1,47 +1,30 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Bjoern Schiessle <bjoern@schiessle.org>
- * @author Daniel Calviño Sánchez <danxuliu@gmail.com>
- * @author Joas Schilling <coding@schilljs.com>
- * @author John Molakvoæ <skjnldsv@protonmail.com>
- * @author Julius Härtl <jus@bitgrid.net>
- * @author Lukas Reschke <lukas@statuscode.ch>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Robin Appelman <robin@icewind.nl>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 namespace OCP\Share;
 
 use OCP\Files\Folder;
 use OCP\Files\Node;
 
+use OCP\IUser;
 use OCP\Share\Exceptions\GenericShareException;
 use OCP\Share\Exceptions\ShareNotFound;
+use OCP\Share\Exceptions\ShareTokenException;
 
 /**
- * Interface IManager
+ * This interface allows to manage sharing files between users and groups.
+ *
+ * This interface must not be implemented in your application but
+ * instead should be used as a service and injected in your code with
+ * dependency injection.
  *
  * @since 9.0.0
  */
 interface IManager {
-
 	/**
 	 * Create a Share
 	 *
@@ -59,11 +42,12 @@ interface IManager {
 	 * The state can't be changed this way: use acceptShare
 	 *
 	 * @param IShare $share
+	 * @param bool $onlyValid Only updates valid shares, invalid shares will be deleted automatically and are not updated
 	 * @return IShare The share object
 	 * @throws \InvalidArgumentException
 	 * @since 9.0.0
 	 */
-	public function updateShare(IShare $share);
+	public function updateShare(IShare $share, bool $onlyValid = true);
 
 	/**
 	 * Accept a share.
@@ -130,10 +114,11 @@ interface IManager {
 	 * @param string $userId
 	 * @param Folder $node
 	 * @param bool $reshares
+	 * @param bool $shallow Whether the method should stop at the first level, or look into sub-folders.
 	 * @return IShare[][] [$fileId => IShare[], ...]
 	 * @since 11.0.0
 	 */
-	public function getSharesInFolder($userId, Folder $node, $reshares = false);
+	public function getSharesInFolder($userId, Folder $node, $reshares = false, $shallow = true);
 
 	/**
 	 * Get shares shared by (initiated) by the provided user.
@@ -144,10 +129,11 @@ interface IManager {
 	 * @param bool $reshares
 	 * @param int $limit The maximum number of returned results, -1 for all results
 	 * @param int $offset
+	 * @param bool $onlyValid Only returns valid shares, invalid shares will be deleted automatically and are not returned
 	 * @return IShare[]
 	 * @since 9.0.0
 	 */
-	public function getSharesBy($userId, $shareType, $path = null, $reshares = false, $limit = 50, $offset = 0);
+	public function getSharesBy($userId, $shareType, $path = null, $reshares = false, $limit = 50, $offset = 0, bool $onlyValid = true);
 
 	/**
 	 * Get shares shared with $user.
@@ -185,11 +171,12 @@ interface IManager {
 	 *
 	 * @param string $id
 	 * @param string|null $recipient userID of the recipient
+	 * @param bool $onlyValid Only returns valid shares, invalid shares will be deleted automatically and are not returned
 	 * @return IShare
 	 * @throws ShareNotFound
 	 * @since 9.0.0
 	 */
-	public function getShareById($id, $recipient = null);
+	public function getShareById($id, $recipient = null, bool $onlyValid = true);
 
 	/**
 	 * Get the share by token possible with password
@@ -205,7 +192,7 @@ interface IManager {
 	 * Verify the password of a public share
 	 *
 	 * @param IShare $share
-	 * @param string $password
+	 * @param ?string $password
 	 * @return bool
 	 * @since 9.0.0
 	 */
@@ -251,9 +238,10 @@ interface IManager {
 	 *  |-folder2 (32)
 	 *   |-fileA (42)
 	 *
-	 * fileA is shared with user1 and user1@server1
+	 * fileA is shared with user1 and user1@server1 and email1@maildomain1
 	 * folder2 is shared with group2 (user4 is a member of group2)
 	 * folder1 is shared with user2 (renamed to "folder (1)") and user2@server2
+	 *                        and email2@maildomain2
 	 *
 	 * Then the access list to '/folder1/folder2/fileA' with $currentAccess is:
 	 * [
@@ -267,15 +255,17 @@ interface IManager {
 	 *      'user2@server2' => ['node_id' => 23, 'token' => 'FooBaR'],
 	 *  ],
 	 *  public => bool
-	 *  mail => bool
-	 * ]
+	 *  mail => [
+	 *      'email1@maildomain1' => ['node_id' => 42, 'token' => 'aBcDeFg'],
+	 *      'email2@maildomain2' => ['node_id' => 23, 'token' => 'hIjKlMn'],
+	 *  ]
 	 *
 	 * The access list to '/folder1/folder2/fileA' **without** $currentAccess is:
 	 * [
 	 *  users  => ['user1', 'user2', 'user4'],
 	 *  remote => bool,
 	 *  public => bool
-	 *  mail => bool
+	 *  mail => ['email1@maildomain1', 'email2@maildomain2']
 	 * ]
 	 *
 	 * This is required for encryption/activity
@@ -314,12 +304,14 @@ interface IManager {
 	public function shareApiAllowLinks();
 
 	/**
-	 * Is password on public link requires
+	 * Is password on public link required
 	 *
+	 * @param bool $checkGroupMembership Check group membership exclusion
 	 * @return bool
 	 * @since 9.0.0
+	 * @since 24.0.0 Added optional $checkGroupMembership parameter
 	 */
-	public function shareApiLinkEnforcePassword();
+	public function shareApiLinkEnforcePassword(bool $checkGroupMembership = true);
 
 	/**
 	 * Is default expire date enabled
@@ -409,6 +401,15 @@ interface IManager {
 	public function shareWithGroupMembersOnly();
 
 	/**
+	 * If shareWithGroupMembersOnly is enabled, return an optional
+	 * list of groups that must be excluded from the principle of
+	 * belonging to the same group.
+	 * @return array
+	 * @since 27.0.0
+	 */
+	public function shareWithGroupMembersOnlyExcludeGroupsList();
+
+	/**
 	 * Check if users can share with groups
 	 * @return bool
 	 * @since 9.0.1
@@ -446,6 +447,40 @@ interface IManager {
 	 * @since 21.0.1
 	 */
 	public function allowEnumerationFullMatch(): bool;
+
+	/**
+	 * Check if the search should match the email
+	 *
+	 * @return bool
+	 * @since 25.0.0
+	 */
+	public function matchEmail(): bool;
+
+	/**
+	 * Check if the search should ignore the second in parentheses display name if there is any
+	 *
+	 * @return bool
+	 * @since 25.0.0
+	 */
+	public function ignoreSecondDisplayName(): bool;
+
+
+	/**
+	 * Check if custom tokens are allowed
+	 *
+	 * @since 31.0.0
+	 */
+	public function allowCustomTokens(): bool;
+
+	/**
+	 * Check if the current user can enumerate the target user
+	 *
+	 * @param IUser|null $currentUser
+	 * @param IUser $targetUser
+	 * @return bool
+	 * @since 23.0.0
+	 */
+	public function currentUserCanEnumerateTargetUser(?IUser $currentUser, IUser $targetUser): bool;
 
 	/**
 	 * Check if sharing is disabled for the given user
@@ -496,4 +531,12 @@ interface IManager {
 	 * @since 18.0.0
 	 */
 	public function getAllShares(): iterable;
+
+	/**
+	 * Generate a unique share token
+	 *
+	 * @throws ShareTokenException Failed to generate a unique token
+	 * @since 31.0.0
+	 */
+	public function generateToken(): string;
 }

@@ -1,8 +1,7 @@
 <?php
 /**
- * Copyright (c) 2014 Robin Appelman <icewind@owncloud.com>
- * This file is licensed under the Licensed under the MIT license:
- * http://opensource.org/licenses/MIT
+ * SPDX-FileCopyrightText: 2014 Robin Appelman <robin@icewind.nl>
+ * SPDX-License-Identifier: MIT
  */
 
 namespace Icewind\SMB\Native;
@@ -37,6 +36,14 @@ class NativeState {
 
 	/** @var bool */
 	protected $connected = false;
+
+	/**
+	 * sync the garbage collection cycle
+	 * __deconstruct() of KerberosAuth should not called too soon
+	 *
+	 * @var IAuth|null $auth
+	 */
+	protected $auth = null;
 
 	// see error.h
 	const EXCEPTION_MAP = [
@@ -107,6 +114,11 @@ class NativeState {
 		}
 
 		$auth->setExtraSmbClientOptions($this->state);
+
+		// sync the garbage collection cycle
+		// __deconstruct() of KerberosAuth should not caled too soon
+		$this->auth = $auth;
+
 		/** @var bool $result */
 		$result = @smbclient_state_init($this->state, $auth->getWorkgroup(), $auth->getUsername(), $auth->getPassword());
 

@@ -1,34 +1,24 @@
 <?php
 /**
- * @copyright Copyright (c) 2018 Joas Schilling <coding@schilljs.com>
- *
- * @author Joas Schilling <coding@schilljs.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2018 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 namespace OCP\DB;
 
+use Doctrine\DBAL\Exception;
+use Doctrine\DBAL\Platforms\AbstractPlatform;
+
 /**
- * Interface ISchemaWrapper
+ * This interface allows to get information about the database schema.
+ * This is particularly helpful for database migration scripts.
+ *
+ * This interface must not be implemented in your application but
+ * instead can be obtained in your migration scripts with the
+ * `$schemaClosure` Closure.
  *
  * @since 13.0.0
  */
 interface ISchemaWrapper {
-
 	/**
 	 * @param string $tableName
 	 *
@@ -81,7 +71,7 @@ interface ISchemaWrapper {
 	 * @since 13.0.0
 	 */
 	public function getTableNames();
-	
+
 	/**
 	 * Gets all table names
 	 *
@@ -89,4 +79,14 @@ interface ISchemaWrapper {
 	 * @since 13.0.0
 	 */
 	public function getTableNamesWithoutPrefix();
+
+	/**
+	 * Gets the DatabasePlatform for the database.
+	 *
+	 * @return AbstractPlatform
+	 *
+	 * @throws Exception
+	 * @since 23.0.0
+	 */
+	public function getDatabasePlatform();
 }

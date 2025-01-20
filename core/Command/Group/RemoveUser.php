@@ -1,48 +1,25 @@
 <?php
 /**
- * @copyright Copyright (c) 2016 Robin Appelman <robin@icewind.nl>
- *
- * @author Joas Schilling <coding@schilljs.com>
- * @author Robin Appelman <robin@icewind.nl>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2016 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 namespace OC\Core\Command\Group;
 
 use OC\Core\Command\Base;
+use OCP\IGroup;
 use OCP\IGroupManager;
+use OCP\IUser;
 use OCP\IUserManager;
+use Stecman\Component\Symfony\Console\BashCompletion\CompletionContext;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
 class RemoveUser extends Base {
-	/** @var IUserManager */
-	protected $userManager;
-	/** @var IGroupManager */
-	protected $groupManager;
-
-	/**
-	 * @param IUserManager $userManager
-	 * @param IGroupManager $groupManager
-	 */
-	public function __construct(IUserManager $userManager, IGroupManager $groupManager) {
-		$this->userManager = $userManager;
-		$this->groupManager = $groupManager;
+	public function __construct(
+		protected IUserManager $userManager,
+		protected IGroupManager $groupManager,
+	) {
 		parent::__construct();
 	}
 
@@ -74,5 +51,25 @@ class RemoveUser extends Base {
 		}
 		$group->removeUser($user);
 		return 0;
+	}
+
+	/**
+	 * @param string $argumentName
+	 * @param CompletionContext $context
+	 * @return string[]
+	 */
+	public function completeArgumentValues($argumentName, CompletionContext $context) {
+		if ($argumentName === 'group') {
+			return array_map(static fn (IGroup $group) => $group->getGID(), $this->groupManager->search($context->getCurrentWord()));
+		}
+		if ($argumentName === 'user') {
+			$groupId = $context->getWordAtIndex($context->getWordIndex() - 1);
+			$group = $this->groupManager->get($groupId);
+			if ($group === null) {
+				return [];
+			}
+			return array_map(static fn (IUser $user) => $user->getUID(), $group->searchUsers($context->getCurrentWord()));
+		}
+		return [];
 	}
 }

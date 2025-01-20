@@ -1,3 +1,7 @@
+<!--
+ - SPDX-FileCopyrightText: 2020 Nextcloud GmbH and Nextcloud contributors
+ - SPDX-License-Identifier: AGPL-3.0-or-later
+-->
 <template>
 	<ul>
 		<!-- Placeholder animation -->
@@ -22,8 +26,7 @@
 
 		<!-- Placeholders -->
 		<li v-for="placeholder in [1, 2, 3]" :key="placeholder">
-			<svg
-				class="unified-search__result-placeholder"
+			<svg class="unified-search__result-placeholder"
 				xmlns="http://www.w3.org/2000/svg"
 				fill="url(#unified-search__result-placeholder-gradient)">
 				<rect class="unified-search__result-placeholder-icon" />

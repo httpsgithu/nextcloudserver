@@ -1,38 +1,16 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
- * @author Bart Visscher <bartv@thisnet.nl>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Hemanth Kumar Veeranki <hems.india1997@gmail.com>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Michael Göhler <somebody.here@gmx.de>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
- * @author Vincent Petry <vincent@nextcloud.com>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 namespace OC\Setup;
 
+use Doctrine\DBAL\Platforms\MySQL80Platform;
 use OC\DB\ConnectionAdapter;
 use OC\DB\MySqlTools;
 use OCP\IDBConnection;
-use Doctrine\DBAL\Platforms\MySQL80Platform;
 use OCP\Security\ISecureRandom;
 
 class MySQL extends AbstractDatabase {
@@ -49,14 +27,21 @@ class MySQL extends AbstractDatabase {
 			$connection = $this->connect(['dbname' => null]);
 		}
 
-		$this->createSpecificUser($username, new ConnectionAdapter($connection));
+		if ($this->tryCreateDbUser) {
+			$this->createSpecificUser($username, new ConnectionAdapter($connection));
+		}
+
+		$this->config->setValues([
+			'dbuser' => $this->dbUser,
+			'dbpassword' => $this->dbPassword,
+		]);
 
 		//create the database
 		$this->createDatabase($connection);
 
 		//fill the database if needed
 		$query = 'select count(*) from information_schema.tables where table_schema=? AND table_name = ?';
-		$connection->executeQuery($query, [$this->dbName, $this->tablePrefix.'users']);
+		$connection->executeQuery($query, [$this->dbName, $this->tablePrefix . 'users']);
 
 		$connection->close();
 		$connection = $this->connect();
@@ -66,7 +51,7 @@ class MySQL extends AbstractDatabase {
 			$this->logger->error($e->getMessage(), [
 				'exception' => $e,
 			]);
-			throw new \OC\DatabaseSetupException($this->trans->t('MySQL username and/or password not valid'),
+			throw new \OC\DatabaseSetupException($this->trans->t('MySQL Login and/or password not valid'),
 				$this->trans->t('You need to enter details of an existing account.'), 0, $e);
 		}
 	}
@@ -80,7 +65,7 @@ class MySQL extends AbstractDatabase {
 			$user = $this->dbUser;
 			//we can't use OC_DB functions here because we need to connect as the administrative user.
 			$characterSet = $this->config->getValue('mysql.utf8mb4', false) ? 'utf8mb4' : 'utf8';
-			$query = "CREATE DATABASE IF NOT EXISTS `$name` CHARACTER SET $characterSet COLLATE ${characterSet}_bin;";
+			$query = "CREATE DATABASE IF NOT EXISTS `$name` CHARACTER SET $characterSet COLLATE {$characterSet}_bin;";
 			$connection->executeUpdate($query);
 		} catch (\Exception $ex) {
 			$this->logger->error('Database creation failed.', [
@@ -125,19 +110,31 @@ class MySQL extends AbstractDatabase {
 				$connection->executeUpdate($query);
 			}
 		} catch (\Exception $ex) {
-			$this->logger->error('Database user creation failed.',[
+			$this->logger->error('Database user creation failed.', [
 				'exception' => $ex,
 				'app' => 'mysql.setup',
 			]);
+			throw $ex;
 		}
 	}
 
 	/**
 	 * @param $username
 	 * @param IDBConnection $connection
-	 * @return array
 	 */
-	private function createSpecificUser($username, $connection) {
+	private function createSpecificUser($username, $connection): void {
+		$rootUser = $this->dbUser;
+		$rootPassword = $this->dbPassword;
+
+		//create a random password so we don't need to store the admin password in the config file
+		$saveSymbols = str_replace(['\"', '\\', '\'', '`'], '', ISecureRandom::CHAR_SYMBOLS);
+		$password = $this->random->generate(22, ISecureRandom::CHAR_ALPHANUMERIC . $saveSymbols)
+			. $this->random->generate(2, ISecureRandom::CHAR_UPPER)
+			. $this->random->generate(2, ISecureRandom::CHAR_LOWER)
+			. $this->random->generate(2, ISecureRandom::CHAR_DIGITS)
+			. $this->random->generate(2, $saveSymbols);
+		$this->dbPassword = str_shuffle($password);
+
 		try {
 			//user already specified in config
 			$oldUser = $this->config->getValue('dbuser', false);
@@ -160,10 +157,6 @@ class MySQL extends AbstractDatabase {
 					if (count($data) === 0) {
 						//use the admin login data for the new database user
 						$this->dbUser = $adminUser;
-
-						//create a random password so we don't need to store the admin password in the config file
-						$this->dbPassword = $this->random->generate(30, ISecureRandom::CHAR_ALPHANUMERIC);
-
 						$this->createDBUser($connection);
 
 						break;
@@ -174,17 +167,18 @@ class MySQL extends AbstractDatabase {
 						$i++;
 					}
 				}
+			} else {
+				// Reuse existing password if a database config is already present
+				$this->dbPassword = $rootPassword;
 			}
 		} catch (\Exception $ex) {
 			$this->logger->info('Can not create a new MySQL user, will continue with the provided user.', [
 				'exception' => $ex,
 				'app' => 'mysql.setup',
 			]);
+			// Restore the original credentials
+			$this->dbUser = $rootUser;
+			$this->dbPassword = $rootPassword;
 		}
-
-		$this->config->setValues([
-			'dbuser' => $this->dbUser,
-			'dbpassword' => $this->dbPassword,
-		]);
 	}
 }

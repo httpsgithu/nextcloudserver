@@ -1,28 +1,15 @@
 <?php
 /**
- * ownCloud
- *
- * @author Robin Appelman
- * @copyright 2012 Robin Appelman icewind@owncloud.com
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU AFFERO GENERAL PUBLIC LICENSE
- * License as published by the Free Software Foundation; either
- * version 3 of the License, or any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU AFFERO GENERAL PUBLIC LICENSE for more details.
- *
- * You should have received a copy of the GNU Affero General Public
- * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace Test\Cache;
 
 use OC\Files\Storage\Local;
+use OCP\Files\Mount\IMountManager;
+use Test\Traits\UserTrait;
 
 /**
  * Class FileCacheTest
@@ -32,6 +19,8 @@ use OC\Files\Storage\Local;
  * @package Test\Cache
  */
 class FileCacheTest extends TestCache {
+	use UserTrait;
+
 	/**
 	 * @var string
 	 * */
@@ -56,27 +45,21 @@ class FileCacheTest extends TestCache {
 	protected function setUp(): void {
 		parent::setUp();
 
-		//clear all proxies and hooks so we can do clean testing
-		\OC_Hook::clear('OC_Filesystem');
-
-		//set up temporary storage
-		$this->storage = \OC\Files\Filesystem::getStorage('/');
-		\OC\Files\Filesystem::clearMounts();
-		$storage = new \OC\Files\Storage\Temporary([]);
-		\OC\Files\Filesystem::mount($storage,[],'/');
-		$datadir = str_replace('local::', '', $storage->getId());
-		$config = \OC::$server->getConfig();
-		$this->datadir = $config->getSystemValue('cachedirectory', \OC::$SERVERROOT.'/data/cache');
-		$config->setSystemValue('cachedirectory', $datadir);
-
-		\OC_User::clearBackends();
-		\OC_User::useBackend(new \Test\Util\User\Dummy());
-
 		//login
-		\OC::$server->getUserManager()->createUser('test', 'test');
+		$this->createUser('test', 'test');
 
 		$this->user = \OC_User::getUser();
 		\OC_User::setUserId('test');
+
+		//clear all proxies and hooks so we can do clean testing
+		\OC_Hook::clear('OC_Filesystem');
+
+		/** @var IMountManager $manager */
+		$manager = \OC::$server->get(IMountManager::class);
+		$manager->removeMount('/test');
+
+		$storage = new \OC\Files\Storage\Temporary([]);
+		\OC\Files\Filesystem::mount($storage, [], '/test/cache');
 
 		//set up the users dir
 		$this->rootView = new \OC\Files\View('');
@@ -94,20 +77,11 @@ class FileCacheTest extends TestCache {
 		}
 
 		\OC_User::setUserId($this->user);
-		\OC::$server->getConfig()->setSystemValue('cachedirectory', $this->datadir);
 
 		if ($this->instance) {
 			$this->instance->clear();
 			$this->instance = null;
 		}
-
-		//tear down the users dir aswell
-		$user = \OC::$server->getUserManager()->get('test');
-		$user->delete();
-
-		// Restore the original mount point
-		\OC\Files\Filesystem::clearMounts();
-		\OC\Files\Filesystem::mount($this->storage, [], '/');
 
 		parent::tearDown();
 	}
@@ -123,7 +97,7 @@ class FileCacheTest extends TestCache {
 		return $mockStorage;
 	}
 
-	public function testGarbageCollectOldKeys() {
+	public function testGarbageCollectOldKeys(): void {
 		$mockStorage = $this->setupMockStorage();
 
 		$mockStorage->expects($this->atLeastOnce())
@@ -138,7 +112,7 @@ class FileCacheTest extends TestCache {
 		$this->instance->gc();
 	}
 
-	public function testGarbageCollectLeaveRecentKeys() {
+	public function testGarbageCollectLeaveRecentKeys(): void {
 		$mockStorage = $this->setupMockStorage();
 
 		$mockStorage->expects($this->atLeastOnce())
@@ -161,7 +135,7 @@ class FileCacheTest extends TestCache {
 	/**
 	 * @dataProvider lockExceptionProvider
 	 */
-	public function testGarbageCollectIgnoreLockedKeys($testException) {
+	public function testGarbageCollectIgnoreLockedKeys($testException): void {
 		$mockStorage = $this->setupMockStorage();
 
 		$mockStorage->expects($this->atLeastOnce())

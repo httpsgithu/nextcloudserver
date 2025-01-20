@@ -1,25 +1,7 @@
 <?php
 /**
- * @copyright Copyright (c) 2016 Joas Schilling <coding@schilljs.com>
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2016 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 namespace OCA\WorkflowEngine\Check;
 
@@ -27,20 +9,20 @@ use OCP\IL10N;
 use OCP\IRequest;
 
 class RequestURL extends AbstractStringCheck {
+	public const CLI = 'cli';
 
-	/** @var string */
+	/** @var ?string */
 	protected $url;
-
-	/** @var IRequest */
-	protected $request;
 
 	/**
 	 * @param IL10N $l
 	 * @param IRequest $request
 	 */
-	public function __construct(IL10N $l, IRequest $request) {
+	public function __construct(
+		IL10N $l,
+		protected IRequest $request,
+	) {
 		parent::__construct($l);
-		$this->request = $request;
 	}
 
 	/**
@@ -49,7 +31,11 @@ class RequestURL extends AbstractStringCheck {
 	 * @return bool
 	 */
 	public function executeCheck($operator, $value) {
-		$actualValue = $this->getActualValue();
+		if (\OC::$CLI) {
+			$actualValue = $this->url = RequestURL::CLI;
+		} else {
+			$actualValue = $this->getActualValue();
+		}
 		if (in_array($operator, ['is', '!is'])) {
 			switch ($value) {
 				case 'webdav':
@@ -79,15 +65,15 @@ class RequestURL extends AbstractStringCheck {
 		return $this->url; // E.g. https://localhost/nextcloud/index.php/apps/files_texteditor/ajax/loadfile
 	}
 
-	/**
-	 * @return bool
-	 */
-	protected function isWebDAVRequest() {
+	protected function isWebDAVRequest(): bool {
+		if ($this->url === RequestURL::CLI) {
+			return false;
+		}
 		return substr($this->request->getScriptName(), 0 - strlen('/remote.php')) === '/remote.php' && (
 			$this->request->getPathInfo() === '/webdav' ||
-			strpos($this->request->getPathInfo(), '/webdav/') === 0 ||
+			str_starts_with($this->request->getPathInfo() ?? '', '/webdav/') ||
 			$this->request->getPathInfo() === '/dav/files' ||
-			strpos($this->request->getPathInfo(), '/dav/files/') === 0
+			str_starts_with($this->request->getPathInfo() ?? '', '/dav/files/')
 		);
 	}
 }

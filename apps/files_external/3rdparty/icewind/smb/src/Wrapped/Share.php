@@ -1,8 +1,7 @@
 <?php
 /**
- * Copyright (c) 2014 Robin Appelman <icewind@owncloud.com>
- * This file is licensed under the Licensed under the MIT license:
- * http://opensource.org/licenses/MIT
+ * SPDX-FileCopyrightText: 2014 Robin Appelman <robin@icewind.nl>
+ * SPDX-License-Identifier: MIT
  */
 
 namespace Icewind\SMB\Wrapped;
@@ -73,7 +72,7 @@ class Share extends AbstractShare {
 		$this->server = $server;
 		$this->name = $name;
 		$this->system = $system;
-		$this->parser = new Parser($server->getTimeZone());
+		$this->parser = new Parser('UTC');
 	}
 
 	private function getAuthFileArgument(): string {
@@ -345,11 +344,17 @@ class Share extends AbstractShare {
 		// since returned stream is closed by the caller we need to create a new instance
 		// since we can't re-use the same file descriptor over multiple calls
 		$connection = $this->getConnection();
+		stream_set_blocking($connection->getOutputStream(), false);
 
 		$connection->write('get ' . $source . ' ' . $this->system->getFD(5));
 		$connection->write('exit');
 		$fh = $connection->getFileOutputStream();
-		stream_context_set_option($fh, 'file', 'connection', $connection);
+		$fh = CallbackWrapper::wrap($fh, function() use ($connection) {
+			$connection->write('');
+		});
+		if (!is_resource($fh)) {
+			throw new Exception("Failed to wrap file output");
+		}
 		return $fh;
 	}
 
@@ -374,7 +379,9 @@ class Share extends AbstractShare {
 
 		// use a close callback to ensure the upload is finished before continuing
 		// this also serves as a way to keep the connection in scope
-		$stream = CallbackWrapper::wrap($fh, null, null, function () use ($connection) {
+		$stream = CallbackWrapper::wrap($fh, function() use ($connection) {
+			$connection->write('');
+		}, null, function () use ($connection) {
 			$connection->close(false); // dont terminate, give the upload some time
 		});
 		if (is_resource($stream)) {
@@ -446,7 +453,7 @@ class Share extends AbstractShare {
 	 * @return string[]
 	 */
 	protected function execute(string $command): array {
-		$this->connect()->write($command . PHP_EOL);
+		$this->connect()->write($command);
 		return $this->connect()->read();
 	}
 

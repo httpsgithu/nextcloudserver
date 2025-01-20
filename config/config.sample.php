@@ -1,6 +1,12 @@
 <?php
 
 /**
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/**
  * This configuration file is only provided to document the different
  * configuration options and their usage.
  *
@@ -55,6 +61,12 @@ $CONFIG = [
 'passwordsalt' => '',
 
 /**
+ * Secret used by Nextcloud for various purposes, e.g. to encrypt data. If you
+ * lose this string there will be data corruption.
+ */
+'secret' => '',
+
+/**
  * Your list of trusted domains that users can log into. Specifying trusted
  * domains prevents host header poisoning. Do not remove this, as it performs
  * necessary security checks.
@@ -106,9 +118,9 @@ $CONFIG = [
 
 /**
  * Your host server name, for example ``localhost``, ``hostname``,
- * ``hostname.example.com``, or the IP address. To specify a port use
- * ``hostname:####``; to specify a Unix socket use
- * ``localhost:/path/to/socket``.
+ * ``hostname.example.com``, or the IP address.
+ * To specify a port use ``hostname:####``, for IPv6 addresses use the URI notation ``[ip]:port``.
+ * To specify a Unix socket use ``/path/to/directory/containing/socket``, e.g. ``/run/postgresql/``.
  */
 'dbhost' => '',
 
@@ -136,8 +148,29 @@ $CONFIG = [
  *
  * Default to ``oc_``
  */
-'dbtableprefix' => '',
+'dbtableprefix' => 'oc_',
 
+/**
+ * Enable persistent connexions to the database.
+ * This setting uses the "persistent" option from doctrine dbal, which in turn
+ * uses the PDO::ATTR_PERSISTENT option from the pdo driver.
+ */
+'dbpersistent' => '',
+
+/**
+ * Specify read only replicas to be used by Nextcloud when querying the database
+ */
+'dbreplica' => [
+	['user' => 'nextcloud', 'password' => 'password1', 'host' => 'replica1', 'dbname' => ''],
+	['user' => 'nextcloud', 'password' => 'password2', 'host' => 'replica2', 'dbname' => ''],
+],
+
+/**
+ * Add request id to the database query in a comment.
+ *
+ * This can be enabled to assist in mapping database logs to Nextcloud logs.
+ */
+'db.log_request_id' => false,
 
 /**
  * Indicates whether the Nextcloud instance was installed successfully; ``true``
@@ -159,13 +192,14 @@ $CONFIG = [
 /**
  * This sets the default language on your Nextcloud server, using ISO_639-1
  * language codes such as ``en`` for English, ``de`` for German, and ``fr`` for
- * French. It overrides automatic language detection on public pages like login
- * or shared items. User's language preferences configured under "personal ->
- * language" override this setting after they have logged in. Nextcloud has two
- * distinguished language codes for German, 'de' and 'de_DE'. 'de' is used for
- * informal German and 'de_DE' for formal German. By setting this value to 'de_DE'
- * you can enforce the formal version of German unless the user has chosen
- * something different explicitly.
+ * French. The default_language parameter is only used, when the browser does
+ * not send any language, and the user hasn’t configured own language
+ * preferences.
+ *
+ * Nextcloud has two distinguished language codes for German, 'de' and 'de_DE'.
+ * 'de' is used for informal German and 'de_DE' for formal German. By setting
+ * this value to 'de_DE' you can enforce the formal version of German unless
+ * the user has chosen something different explicitly.
  *
  * Defaults to ``en``
  */
@@ -195,6 +229,15 @@ $CONFIG = [
 'default_locale' => 'en_US',
 
 /**
+ * With this setting is possible to reduce the languages available in the
+ * language chooser. The languages have to be set as array values using ISO_639-1
+ * language codes such as ``en`` for English, ``de`` for German etc.
+ *
+ * For example: Set to ['de', 'fr'] to only allow German and French languages.
+ */
+'reduce_to_languages' => [],
+
+/**
  * This sets the default region for phone numbers on your Nextcloud server,
  * using ISO 3166-1 country codes such as ``DE`` for Germany, ``FR`` for France, …
  * It is required to allow inserting phone numbers in the user profiles starting
@@ -216,15 +259,14 @@ $CONFIG = [
 'force_locale' => 'en_US',
 
 /**
- * Set the default app to open on login. Use the app names as they appear in the
- * URL after clicking them in the Apps menu, such as documents, calendar, and
- * gallery. You can use a comma-separated list of app names, so if the first
- * app is not enabled for a user then Nextcloud will try the second one, and so
- * on. If no enabled apps are found it defaults to the dashboard app.
+ * This sets the default timezone on your Nextcloud server, using IANA
+ * identifiers like ``Europe/Berlin`` or ``Pacific/Auckland``. The default
+ * timezone parameter is only used when the timezone of the user can't be
+ * determined.
  *
- * Defaults to ``dashboard,files``
+ * Defaults to ``UTC``
  */
-'defaultapp' => 'dashboard,files',
+'default_timezone' => 'Europe/Berlin',
 
 /**
  * ``true`` enables the Help menu item in the user menu (top right of the
@@ -233,89 +275,16 @@ $CONFIG = [
 'knowledgebaseenabled' => true,
 
 /**
+ * ``true`` embeds the documentation in an iframe inside Nextcloud.
+ * ``false`` only shows buttons to the online documentation.
+ */
+'knowledgebase.embedded' => false,
+
+/**
  * ``true`` allows users to change their display names (on their Personal
  * pages), and ``false`` prevents them from changing their display names.
  */
 'allow_user_to_change_display_name' => true,
-
-/**
- * Lifetime of the remember login cookie. This should be larger than the
- * session_lifetime. If it is set to 0 remember me is disabled.
- *
- * Defaults to ``60*60*24*15`` seconds (15 days)
- */
-'remember_login_cookie_lifetime' => 60*60*24*15,
-
-/**
- * The lifetime of a session after inactivity.
- *
- * The maximum possible time is limited by the session.gc_maxlifetime php.ini setting
- * which would overwrite this option if it is less than the value in the config.php
- *
- * Defaults to ``60*60*24`` seconds (24 hours)
- */
-'session_lifetime' => 60 * 60 * 24,
-
-/**
- * Enable or disable session keep-alive when a user is logged in to the Web UI.
- * Enabling this sends a "heartbeat" to the server to keep it from timing out.
- *
- * Defaults to ``true``
- */
-'session_keepalive' => true,
-
-/**
- * Enable or disable the automatic logout after session_lifetime, even if session
- * keepalive is enabled. This will make sure that an inactive browser will be logged out
- * even if requests to the server might extend the session lifetime.
- *
- * Defaults to ``false``
- */
-'auto_logout' => false,
-
-/**
- * Enforce token authentication for clients, which blocks requests using the user
- * password for enhanced security. Users need to generate tokens in personal settings
- * which can be used as passwords on their clients.
- *
- * Defaults to ``false``
- */
-'token_auth_enforced' => false,
-
-/**
- * The interval at which token activity should be updated.
- * Increasing this value means that the last activty on the security page gets
- * more outdated.
- *
- * Tokens are still checked every 5 minutes for validity
- * max value: 300
- *
- * Defaults to ``300``
- */
-'token_auth_activity_update' => 60,
-
-/**
- * Whether the bruteforce protection shipped with Nextcloud should be enabled or not.
- *
- * Disabling this is discouraged for security reasons.
- *
- * Defaults to ``true``
- */
-'auth.bruteforce.protection.enabled' => true,
-
-/**
- * By default WebAuthn is available but it can be explicitly disabled by admins
- */
-'auth.webauthn.enabled' => true,
-
-/**
- * By default the login form is always available. There are cases (SSO) where an
- * admin wants to avoid users entering their credentials to the system if the SSO
- * app is unavailable.
- *
- * This will show an error. But the the direct login still works with adding ?direct=1
- */
-'hide_login_form' => false,
 
 /**
  * The directory where the skeleton files are located. These files will be
@@ -345,6 +314,177 @@ $CONFIG = [
 'templatedirectory' => '/path/to/nextcloud/templates',
 
 /**
+ * User session
+ */
+
+/**
+ * Lifetime of the remember login cookie. This should be larger than the
+ * session_lifetime. If it is set to 0 remember me is disabled.
+ *
+ * Defaults to ``60*60*24*15`` seconds (15 days)
+ */
+'remember_login_cookie_lifetime' => 60*60*24*15,
+
+/**
+ * The lifetime of a session after inactivity.
+ *
+ * The maximum possible time is limited by the session.gc_maxlifetime php.ini setting
+ * which would overwrite this option if it is less than the value in the config.php
+ *
+ * Defaults to ``60*60*24`` seconds (24 hours)
+ */
+'session_lifetime' => 60 * 60 * 24,
+
+/**
+ * The timeout in seconds for requests to servers made by the DAV component (e.g., needed for federated shares).
+ */
+'davstorage.request_timeout' => 30,
+
+/**
+ * The timeout in seconds for synchronizing address books, e.g. federated system address books (as run by `occ federation:sync-addressbooks`).
+ *
+ * Defaults to ``30`` seconds
+ */
+'carddav_sync_request_timeout' => 30,
+
+/**
+ * `true` enabled a relaxed session timeout, where the session timeout would no longer be
+ * handled by Nextcloud but by either the PHP garbage collection or the expiration of
+ * potential other session backends like redis.
+ *
+ * This may lead to sessions being available for longer than what session_lifetime uses but
+ * comes with performance benefits as sessions are no longer a locking operation for concurrent
+ * requests.
+ */
+'session_relaxed_expiry' => false,
+
+/**
+ * Enable or disable session keep-alive when a user is logged in to the Web UI.
+ * Enabling this sends a "heartbeat" to the server to keep it from timing out.
+ *
+ * Defaults to ``true``
+ */
+'session_keepalive' => true,
+
+/**
+ * Enable or disable the automatic logout after session_lifetime, even if session
+ * keepalive is enabled. This will make sure that an inactive browser will log itself out
+ * even if requests to the server might extend the session lifetime. Note: the logout is
+ * handled on the client side. This is not a way to limit the duration of potentially
+ * compromised sessions.
+ *
+ * Defaults to ``false``
+ */
+'auto_logout' => false,
+
+/**
+ * Enforce token authentication for clients, which blocks requests using the user
+ * password for enhanced security. Users need to generate tokens in personal settings
+ * which can be used as passwords on their clients.
+ *
+ * Defaults to ``false``
+ */
+'token_auth_enforced' => false,
+
+/**
+ * The interval at which token activity should be updated.
+ * Increasing this value means that the last activity on the security page gets
+ * more outdated.
+ *
+ * Tokens are still checked every 5 minutes for validity
+ * max value: 300
+ *
+ * Defaults to ``60``
+ */
+'token_auth_activity_update' => 60,
+
+/**
+ * Whether the brute force protection shipped with Nextcloud should be enabled or not.
+ *
+ * Disabling this is discouraged for security reasons.
+ *
+ * Defaults to ``true``
+ */
+'auth.bruteforce.protection.enabled' => true,
+
+/**
+ * Whether the brute force protection should write into the database even when a memory cache is available
+ *
+ * Using the database is most likely worse for performance, but makes investigating
+ * issues a lot easier as it's possible to look directly at the table to see all
+ * logged remote addresses and actions.
+ *
+ * Defaults to ``false``
+ */
+'auth.bruteforce.protection.force.database' => false,
+
+/**
+ * Whether the brute force protection shipped with Nextcloud should be set to testing mode.
+ *
+ * In testing mode brute force attempts are still recorded, but the requests do
+ * not sleep/wait for the specified time. They will still abort with
+ * "429 Too Many Requests" when the maximum delay is reached.
+ * Enabling this is discouraged for security reasons
+ * and should only be done for debugging and on CI when running tests.
+ *
+ * Defaults to ``false``
+ */
+'auth.bruteforce.protection.testing' => false,
+
+/**
+ * Brute force protection: maximum number of attempts before blocking
+ *
+ * When more than max-attempts login requests are sent to Nextcloud, requests
+ * will abort with "429 Too Many Requests".
+ * For security reasons, change it only if you know what you are doing.
+ *
+ * Defaults to ``10``
+ */
+'auth.bruteforce.max-attempts' => 10,
+
+/**
+ * Whether the rate limit protection shipped with Nextcloud should be enabled or not.
+ *
+ * Disabling this is discouraged for security reasons.
+ *
+ * Defaults to ``true``
+ */
+'ratelimit.protection.enabled' => true,
+
+/**
+ * By default, WebAuthn is available, but it can be explicitly disabled by admins
+ */
+'auth.webauthn.enabled' => true,
+
+/**
+ * Whether encrypted password should be stored in the database
+ *
+ * The passwords are only decrypted using the login token stored uniquely in the
+ * clients and allow to connect to external storages, autoconfigure mail account in
+ * the mail app and periodically check if the password it still valid.
+ *
+ * This might be desirable to disable this functionality when using one time
+ * passwords or when having a password policy enforcing long passwords (> 300
+ * characters).
+ *
+ * By default, the passwords are stored encrypted in the database.
+ *
+ * WARNING: If disabled, password changes on the user back-end (e.g. on LDAP) no
+ * longer log connected clients out automatically. Users can still disconnect
+ * the clients by deleting the app token from the security settings.
+ */
+'auth.storeCryptedPassword' => true,
+
+/**
+ * By default, the login form is always available. There are cases (SSO) where an
+ * admin wants to avoid users entering their credentials to the system if the SSO
+ * app is unavailable.
+ *
+ * This will show an error. But the direct login still works with adding ?direct=1
+ */
+'hide_login_form' => false,
+
+/**
  * If your user backend does not allow password resets (e.g. when it's a
  * read-only user backend like LDAP), you can specify a custom link, where the
  * user is redirected to, when clicking the "reset password" link after a failed
@@ -352,6 +492,13 @@ $CONFIG = [
  * In case you do not want to provide any link, replace the url with 'disabled'
  */
 'lost_password_link' => 'https://example.org/link/to/password/reset',
+
+/**
+ * URL to use as target for the logo link in the header (top-left logo)
+ *
+ * Defaults to the base URL of your Nextcloud instance
+ */
+'logo_url' => 'https://example.org',
 
 /**
  * Mail Parameters
@@ -377,13 +524,15 @@ $CONFIG = [
 
 /**
  * Enable SMTP class debugging.
+ * NOTE: ``loglevel`` will likely need to be adjusted too. See docs:
+ *   https://docs.nextcloud.com/server/latest/admin_manual/configuration_server/email_configuration.html#enabling-debug-mode
  *
  * Defaults to ``false``
  */
 'mail_smtpdebug' => false,
 
 /**
- * Which mode to use for sending mail: ``sendmail``, ``smtp`` or ``qmail``.
+ * Which mode to use for sending mail: ``sendmail``, ``smtp``, ``qmail`` or ``null``.
  *
  * If you are using local or remote SMTP, set this to ``smtp``.
  *
@@ -393,13 +542,16 @@ $CONFIG = [
  * For ``qmail`` the binary is /var/qmail/bin/sendmail, and it must be installed
  * on your Unix system.
  *
+ * Use the string ``null`` to send no mails (disable mail delivery). This can be
+ * useful if mails should be sent via APIs and rendering messages is not necessary.
+ *
  * Defaults to ``smtp``
  */
 'mail_smtpmode' => 'smtp',
 
 /**
  * This depends on ``mail_smtpmode``. Specify the IP address of your mail
- * server host. This may contain multiple hosts separated by a semi-colon. If
+ * server host. This may contain multiple hosts separated by a semicolon. If
  * you need to specify the port number append it to the IP address separated by
  * a colon, like this: ``127.0.0.1:24``.
  *
@@ -424,28 +576,23 @@ $CONFIG = [
 'mail_smtptimeout' => 10,
 
 /**
- * This depends on ``mail_smtpmode``. Specify when you are using ``ssl`` for SSL/TLS or
- * ``tls`` for STARTTLS, or leave empty for no encryption.
+ * This depends on ``mail_smtpmode``. Specify ``ssl`` when you are using SSL/TLS. Any other value will be ignored.
+ *
+ * If the server advertises STARTTLS capabilities, they might be used, but they cannot be enforced by
+ * this config option.
  *
  * Defaults to ``''`` (empty string)
  */
 'mail_smtpsecure' => '',
 
 /**
+ *
  * This depends on ``mail_smtpmode``. Change this to ``true`` if your mail
  * server requires authentication.
  *
  * Defaults to ``false``
  */
 'mail_smtpauth' => false,
-
-/**
- * This depends on ``mail_smtpmode``. If SMTP authentication is required, choose
- * the authentication type as ``LOGIN`` or ``PLAIN``.
- *
- * Defaults to ``LOGIN``
- */
-'mail_smtpauthtype' => 'LOGIN',
 
 /**
  * This depends on ``mail_smtpauth``. Specify the username for authenticating to
@@ -471,7 +618,7 @@ $CONFIG = [
 'mail_template_class' => '\OC\Mail\EMailTemplate',
 
 /**
- * Email will be send by default with an HTML and a plain text body. This option
+ * Email will be sent by default with an HTML and a plain text body. This option
  * allows to only send plain text emails.
  */
 'mail_send_plaintext_only' => false,
@@ -541,6 +688,8 @@ $CONFIG = [
  * are generated within Nextcloud using any kind of command line tools (cron or
  * occ). The value should contain the full base URL:
  * ``https://www.example.com/nextcloud``
+ * Please make sure to set the value to the URL that your users mainly use to access this Nextcloud.
+ * Otherwise there might be problems with the URL generation via cron.
  *
  * Defaults to ``''`` (empty string)
  */
@@ -578,8 +727,8 @@ $CONFIG = [
  * this parameter has to be set to true and will assume mod_rewrite.
  *
  * Please check, if `mod_rewrite` is active and functional before setting this
- * parameter and you updated your .htaccess with `occ maintenance:update:htaccess`.
- * Otherwise your nextcloud installation might not be reachable anymore.
+ * parameter, and you updated your .htaccess with `occ maintenance:update:htaccess`.
+ * Otherwise, your nextcloud installation might not be reachable anymore.
  * For example, try accessing resources by leaving out `index.php` in the URL.
  */
 'htaccess.IgnoreFrontController' => false,
@@ -632,27 +781,46 @@ $CONFIG = [
 /**
  * If the trash bin app is enabled (default), this setting defines the policy
  * for when files and folders in the trash bin will be permanently deleted.
+ *
+ * If the user quota limit is exceeded due to deleted files in the trash bin,
+ * retention settings will be ignored and files will be cleaned up until
+ * the quota requirements are met.
+ *
  * The app allows for two settings, a minimum time for trash bin retention,
  * and a maximum time for trash bin retention.
+ *
  * Minimum time is the number of days a file will be kept, after which it
- * may be deleted. Maximum time is the number of days at which it is guaranteed
- * to be deleted.
+ * *may be* deleted. A file may be deleted after the minimum number of days
+ * is expired if space is needed. The file will not be deleted if space is
+ * not needed.
+ *
+ * Whether "space is needed" depends on whether a user quota is defined or not:
+ *
+ *  * If no user quota is defined, the available space on the Nextcloud data
+ *    partition sets the limit for the trashbin
+ *    (issues: see https://github.com/nextcloud/server/issues/28451).
+ *  * If a user quota is defined, 50% of the user's remaining quota space sets
+ *    the limit for the trashbin.
+ *
+ * Maximum time is the number of days at which it is *guaranteed
+ * to be* deleted. There is no further dependency on the available space.
+ *
  * Both minimum and maximum times can be set together to explicitly define
  * file and folder deletion. For migration purposes, this setting is installed
  * initially set to "auto", which is equivalent to the default setting in
  * Nextcloud.
  *
- * Available values:
+ * Available values (D1 and D2 are configurable numbers):
  *
  * * ``auto``
  *     default setting. keeps files and folders in the trash bin for 30 days
  *     and automatically deletes anytime after that if space is needed (note:
  *     files may not be deleted if space is not needed).
- * * ``D, auto``
- *     keeps files and folders in the trash bin for D+ days, delete anytime if
+ * * ``D1, auto``
+ *     keeps files and folders in the trash bin for D1+ days, delete anytime if
  *     space needed (note: files may not be deleted if space is not needed)
- * * ``auto, D``
- *     delete all files in the trash bin that are older than D days
+ * * ``auto, D2``
+ *     delete all files in the trash bin that are older than D2 days
  *     automatically, delete other files anytime if space needed
  * * ``D1, D2``
  *     keep files and folders in the trash bin for at least D1 days and
@@ -691,7 +859,7 @@ $CONFIG = [
  *     rules. Please refer to :doc:`../configuration_files/file_versioning` for
  *     more information.
  * * ``D, auto``
- *     keep versions at least for D days, apply expire rules to all versions
+ *     keep versions at least for D days, apply expiration rules to all versions
  *     that are older than D days
  * * ``auto, D``
  *     delete all versions that are older than D days automatically, delete
@@ -742,9 +910,10 @@ $CONFIG = [
  * The channel that Nextcloud should use to look for updates
  *
  * Supported values:
- *   - ``daily``
- *   - ``beta``
- *   - ``stable``
+ *
+ * - ``daily``
+ * - ``beta``
+ * - ``stable``
  */
 'updater.release.channel' => 'stable',
 
@@ -760,19 +929,23 @@ $CONFIG = [
  * connection. If none of these hosts are reachable, the administration panel
  * will show a warning. Set to an empty list to not do any such checks (warning
  * will still be shown).
+ * If no protocol is provided, both http and https will be tested.
+ * For example, 'http://www.nextcloud.com' and 'https://www.nextcloud.com'
+ * will be tested for 'www.nextcloud.com'
+ * If a protocol is provided, only this one will be tested.
  *
  * Defaults to the following domains:
  *
- *  - www.nextcloud.com
- *  - www.startpage.com
- *  - www.eff.org
- *  - www.edri.org
+ *  - https://www.nextcloud.com
+ *  - https://www.startpage.com
+ *  - https://www.eff.org
+ *  - https://www.edri.org
  */
 'connectivity_check_domains' => [
-	'www.nextcloud.com',
-	'www.startpage.com',
-	'www.eff.org',
-	'www.edri.org'
+	'https://www.nextcloud.com',
+	'https://www.startpage.com',
+	'https://www.eff.org',
+	'https://www.edri.org'
 ],
 
 /**
@@ -796,7 +969,7 @@ $CONFIG = [
 'check_for_working_htaccess' => true,
 
 /**
- * In rare setups (e.g. on Openshift or docker on windows) the permissions check
+ * In rare setups (e.g. on Openshift or Docker on Windows) the permissions check
  * might block the installation while the underlying system offers no means to
  * "correct" the permissions. In this case, set the value to false.
  *
@@ -809,11 +982,11 @@ $CONFIG = [
 
 /**
  * In certain environments it is desired to have a read-only configuration file.
- * When this switch is set to ``true`` Nextcloud will not verify whether the
- * configuration is writable. However, it will not be possible to configure
- * all options via the Web interface. Furthermore, when updating Nextcloud
- * it is required to make the configuration file writable again for the update
- * process.
+ * When this switch is set to ``true``, writing to the config file will be
+ * forbidden. Therefore, it will not be possible to configure all options via
+ * the Web interface. Furthermore, when updating Nextcloud it is required to
+ * make the configuration file writable again and to set this switch to ``false``
+ * for the update process.
  *
  * Defaults to ``false``
  */
@@ -840,6 +1013,13 @@ $CONFIG = [
 'log_type' => 'file',
 
 /**
+ * This parameter determines where the audit logs are sent. See ``log_type`` for more information.
+ *
+ * Defaults to ``file``
+ */
+'log_type_audit' => 'file',
+
+/**
  * Name of the file to which the Nextcloud logs are written if parameter
  * ``log_type`` is set to ``file``.
  *
@@ -848,7 +1028,15 @@ $CONFIG = [
 'logfile' => '/var/log/nextcloud.log',
 
 /**
- * Log file mode for the Nextcloud loggin type in octal notation.
+ * Name of the file to which the audit logs are written if parameter
+ * ``log_type`` is set to ``file``.
+ *
+ * Defaults to ``[datadirectory]/audit.log``
+ */
+'logfile_audit' => '/var/log/audit.log',
+
+/**
+ * Log file mode for the Nextcloud logging type in octal notation.
  *
  * Defaults to 0640 (writeable by user, readable by group).
  */
@@ -863,6 +1051,24 @@ $CONFIG = [
 'loglevel' => 2,
 
 /**
+ * Loglevel used by the frontend to start logging at. The same values as
+ * for ``loglevel`` can be used. If not set it defaults to the value
+ * configured for ``loglevel`` or Warning if that is not set either.
+ *
+ * Defaults to ``2``
+ */
+'loglevel_frontend' => 2,
+
+/**
+ * Loglevel used by the dirty database query detection. Useful to identify
+ * potential database bugs in production. Set this to loglevel or higher to
+ * see dirty queries in the logs.
+ *
+ * Defaults to ``0`` (debug)
+ */
+'loglevel_dirty_database_queries' => 0,
+
+/**
  * If you maintain different instances and aggregate the logs, you may want
  * to distinguish between them. ``syslog_tag`` can be set per instance
  * with a unique id. Only available if ``log_type`` is set to ``syslog`` or
@@ -871,6 +1077,16 @@ $CONFIG = [
  * The default value is ``Nextcloud``.
  */
 'syslog_tag' => 'Nextcloud',
+
+/**
+ * If you maintain different instances and aggregate the logs, you may want
+ * to distinguish between them. ``syslog_tag_audit`` can be set per instance
+ * with a unique id. Only available if ``log_type`` is set to ``syslog`` or
+ * ``systemd``.
+ *
+ * The default value is the value of ``syslog_tag``.
+ */
+'syslog_tag_audit' => 'Nextcloud',
 
 /**
  * Log condition for log level increase based on conditions. Once one of these
@@ -884,6 +1100,9 @@ $CONFIG = [
  *                this condition is met
  *  - ``apps``:   if the log message is invoked by one of the specified apps,
  *                this condition is met
+ *  - ``matches``: if all the conditions inside a group match,
+ *                this condition is met. This allows to log only entries to an app
+ *                by a few users.
  *
  * Defaults to an empty array.
  */
@@ -891,7 +1110,26 @@ $CONFIG = [
 	'shared_secret' => '57b58edb6637fe3059b3595cf9c41b9',
 	'users' => ['sample-user'],
 	'apps' => ['files'],
+	'matches' => [
+		[
+			'shared_secret' => '57b58edb6637fe3059b3595cf9c41b9',
+			'users' => ['sample-user'],
+			'apps' => ['files'],
+			'loglevel' => 1,
+			'message' => 'contains substring'
+		],
+	],
 ],
+
+/**
+ * Enables logging a backtrace with each log line. Normally, only Exceptions
+ * are carrying backtrace information which are logged automatically. This
+ * switch turns them on for any log message. Enabling this option will lead
+ * to increased log data size.
+ *
+ * Defaults to ``false``.
+ */
+'log.backtrace' => false,
 
 /**
  * This uses PHP.date formatting; see https://www.php.net/manual/en/function.date.php
@@ -926,11 +1164,19 @@ $CONFIG = [
  */
 'log_rotate_size' => 100 * 1024 * 1024,
 
+/**
+ * Enable built-in profiler. Helpful when trying to debug performance
+ * issues.
+ *
+ * Note that this has a performance impact and shouldn't be enabled
+ * on production.
+ */
+'profiler' => false,
 
 /**
  * Alternate Code Locations
  *
- * Some of the Nextcloud code may be stored in alternate locations.
+ * Some Nextcloud code may be stored in alternate locations.
  */
 
 /**
@@ -938,10 +1184,12 @@ $CONFIG = [
  * seen in the first-run wizard and on Personal pages.
  *
  * Defaults to:
- *  - Desktop client: ``https://nextcloud.com/install/#install-clients``
- *  - Android client: ``https://play.google.com/store/apps/details?id=com.nextcloud.client``
- *  - iOS client: ``https://itunes.apple.com/us/app/nextcloud/id1125420102?mt=8``
- *  - iOS client app id: ``1125420102``
+ *
+ * - Desktop client: ``https://nextcloud.com/install/#install-clients``
+ * - Android client: ``https://play.google.com/store/apps/details?id=com.nextcloud.client``
+ * - iOS client: ``https://itunes.apple.com/us/app/nextcloud/id1125420102?mt=8``
+ * - iOS client app id: ``1125420102``
+ * - F-Droid client: ``https://f-droid.org/packages/com.nextcloud.client/``
  */
 'customclient_desktop' =>
 	'https://nextcloud.com/install/#install-clients',
@@ -951,11 +1199,24 @@ $CONFIG = [
 	'https://itunes.apple.com/us/app/nextcloud/id1125420102?mt=8',
 'customclient_ios_appid' =>
 		'1125420102',
+'customclient_fdroid' =>
+	'https://f-droid.org/packages/com.nextcloud.client/',
 /**
  * Apps
  *
  * Options for the Apps folder, Apps store, and App code checker.
  */
+
+/**
+ * Set the default app to open on login. The entry IDs can be retrieved from
+ * the Navigations OCS API endpoint: https://docs.nextcloud.com/server/latest/develper_manual/_static/openapi.html#/operations/core-navigation-get-apps-navigation.
+ * You can use a comma-separated list of app names, so if the first
+ * app is not enabled for a user then Nextcloud will try the second one, and so
+ * on. If no enabled apps are found it defaults to the dashboard app.
+ *
+ * Defaults to ``dashboard,files``
+ */
+'defaultapp' => 'dashboard,files',
 
 /**
  * When enabled, admins may install apps from the Nextcloud app store.
@@ -965,12 +1226,18 @@ $CONFIG = [
 'appstoreenabled' => true,
 
 /**
- * Enables the installation of apps from a self hosted apps store.
+ * Enables the installation of apps from a self-hosted apps store.
  * Requires that at least one of the configured apps directories is writeable.
  *
  * Defaults to ``https://apps.nextcloud.com/api/v1``
  */
 'appstoreurl' => 'https://apps.nextcloud.com/api/v1',
+
+/**
+ * Filters allowed installable apps from the appstore.
+ * Empty array will prevent all apps from the store to be found.
+ */
+'appsallowlist' => [],
 
 /**
  * Use the ``apps_paths`` parameter to set the location of the Apps directory,
@@ -1013,6 +1280,28 @@ $CONFIG = [
  * Defaults to ``true``
  */
 'enable_previews' => true,
+
+/**
+ * Number of all preview requests being processed concurrently,
+ * including previews that need to be newly generated, and those that have
+ * been generated.
+ *
+ * This should be greater than 'preview_concurrency_new'.
+ * If unspecified, defaults to twice the value of 'preview_concurrency_new'.
+ */
+'preview_concurrency_all' => 8,
+
+/**
+ * Number of new previews that are being concurrently generated.
+ *
+ * Depending on the max preview size set by 'preview_max_x' and 'preview_max_y',
+ * the generation process can consume considerable CPU and memory resources.
+ * It's recommended to limit this to be no greater than the number of CPU cores.
+ * If unspecified, defaults to the number of CPU cores, or 4 if that cannot
+ * be determined.
+ */
+'preview_concurrency_new' => 4,
+
 /**
  * The maximum width, in pixels, of a preview. A value of ``null`` means there
  * is no limit.
@@ -1029,13 +1318,24 @@ $CONFIG = [
 'preview_max_y' => 4096,
 
 /**
- * max file size for generating image previews with imagegd (default behavior)
+ * Max file size for generating image previews with imagegd (default behavior).
  * If the image is bigger, it'll try other preview generators, but will most
- * likely show the default mimetype icon. Set to -1 for no limit.
+ * likely either show the default mimetype icon or not display the image at all.
+ * Set to ``-1`` for no limit and try to generate image previews on all file sizes.
  *
  * Defaults to ``50`` megabytes
  */
 'preview_max_filesize_image' => 50,
+
+/**
+ * max memory for generating image previews with imagegd (default behavior)
+ * Reads the image dimensions from the header and assumes 32 bits per pixel.
+ * If creating the image would allocate more memory, preview generation will
+ * be disabled and the default mimetype icon is shown. Set to -1 for no limit.
+ *
+ * Defaults to ``256`` megabytes
+ */
+'preview_max_memory' => 256,
 
 /**
  * custom path for LibreOffice/OpenOffice binary
@@ -1044,14 +1344,32 @@ $CONFIG = [
  * Defaults to ``''`` (empty string)
  */
 'preview_libreoffice_path' => '/usr/bin/libreoffice',
+
 /**
- * Use this if LibreOffice/OpenOffice requires additional arguments.
+ * custom path for ffmpeg binary
  *
- * Defaults to ``''`` (empty string)
+ * Defaults to ``null`` and falls back to searching ``avconv`` and ``ffmpeg``
+ * in the configured ``PATH`` environment
  */
-'preview_office_cl_parameters' =>
-	' --headless --nologo --nofirststartwizard --invisible --norestore '.
-	'--convert-to png --outdir ',
+'preview_ffmpeg_path' => '/usr/bin/ffmpeg',
+
+/**
+ * Set the URL of the Imaginary service to send image previews to.
+ * Also requires the ``OC\Preview\Imaginary`` provider to be enabled in the
+ * ``enabledPreviewProviders`` array, to create previews for these mimetypes: bmp,
+ * x-bitmap, png, jpeg, gif, heic, heif, svg+xml, tiff, webp and illustrator.
+ *
+ * If you want Imaginary to also create preview images from PDF Documents, you
+ * have to add the ``OC\Preview\ImaginaryPDF`` provider as well.
+ *
+ * See https://github.com/h2non/imaginary
+ */
+'preview_imaginary_url' => 'http://previews_hpb:8088/',
+
+/**
+ * If you want set a api key for imaginary.
+ */
+'preview_imaginary_key' => 'secret',
 
 /**
  * Only register providers that have been explicitly enabled
@@ -1059,46 +1377,64 @@ $CONFIG = [
  * The following providers are disabled by default due to performance or privacy
  * concerns:
  *
- *  - OC\Preview\Illustrator
- *  - OC\Preview\HEIC
- *  - OC\Preview\Movie
- *  - OC\Preview\MSOffice2003
- *  - OC\Preview\MSOffice2007
- *  - OC\Preview\MSOfficeDoc
- *  - OC\Preview\PDF
- *  - OC\Preview\Photoshop
- *  - OC\Preview\Postscript
- *  - OC\Preview\StarOffice
- *  - OC\Preview\SVG
- *  - OC\Preview\TIFF
- *  - OC\Preview\Font
+ *  - ``OC\Preview\Font``
+ *  - ``OC\Preview\HEIC``
+ *  - ``OC\Preview\Illustrator``
+ *  - ``OC\Preview\Movie``
+ *  - ``OC\Preview\MSOffice2003``
+ *  - ``OC\Preview\MSOffice2007``
+ *  - ``OC\Preview\MSOfficeDoc``
+ *  - ``OC\Preview\PDF``
+ *  - ``OC\Preview\Photoshop``
+ *  - ``OC\Preview\Postscript``
+ *  - ``OC\Preview\StarOffice``
+ *  - ``OC\Preview\SVG``
+ *  - ``OC\Preview\TIFF``
+ *  - ``OC\Preview\EMF``
  *
  *
  * Defaults to the following providers:
  *
- *  - OC\Preview\BMP
- *  - OC\Preview\GIF
- *  - OC\Preview\JPEG
- *  - OC\Preview\MarkDown
- *  - OC\Preview\MP3
- *  - OC\Preview\PNG
- *  - OC\Preview\TXT
- *  - OC\Preview\XBitmap
- *  - OC\Preview\OpenDocument
- *  - OC\Preview\Krita
+ *  - ``OC\Preview\BMP``
+ *  - ``OC\Preview\GIF``
+ *  - ``OC\Preview\JPEG``
+ *  - ``OC\Preview\Krita``
+ *  - ``OC\Preview\MarkDown``
+ *  - ``OC\Preview\MP3``
+ *  - ``OC\Preview\OpenDocument``
+ *  - ``OC\Preview\PNG``
+ *  - ``OC\Preview\TXT``
+ *  - ``OC\Preview\XBitmap``
  */
 'enabledPreviewProviders' => [
-	'OC\Preview\PNG',
-	'OC\Preview\JPEG',
-	'OC\Preview\GIF',
 	'OC\Preview\BMP',
-	'OC\Preview\XBitmap',
-	'OC\Preview\MP3',
-	'OC\Preview\TXT',
-	'OC\Preview\MarkDown',
-	'OC\Preview\OpenDocument',
+	'OC\Preview\GIF',
+	'OC\Preview\JPEG',
 	'OC\Preview\Krita',
+	'OC\Preview\MarkDown',
+	'OC\Preview\MP3',
+	'OC\Preview\OpenDocument',
+	'OC\Preview\PNG',
+	'OC\Preview\TXT',
+	'OC\Preview\XBitmap',
 ],
+
+/**
+ * Maximum file size for metadata generation.
+ * If a file exceeds this size, metadata generation will be skipped.
+ * Note: memory equivalent to this size will be used for metadata generation.
+ *
+ * Default: 256 megabytes.
+ */
+'metadata_max_filesize' => 256,
+
+/**
+ * Maximum file size for file conversion.
+ * If a file exceeds this size, the file will not be converted.
+ *
+ * Default: 100 MiB
+ */
+'max_file_conversion_filesize' => 100,
 
 /**
  * LDAP
@@ -1120,6 +1456,7 @@ $CONFIG = [
  * Sort groups in the user settings by name instead of the user count
  *
  * By enabling this the user count beside the group name is disabled as well.
+ * @deprecated since Nextcloud 29 - Use the frontend instead or set the app config value `group.sortBy` for `core` to `2`
  */
 'sort_groups_by_name' => false,
 
@@ -1166,6 +1503,28 @@ $CONFIG = [
  */
 'maintenance' => false,
 
+/**
+ * UTC Hour for maintenance windows
+ *
+ * Some background jobs only run once a day. When an hour is defined for this config,
+ * the background jobs which advertise themselves as not time sensitive will be
+ * delayed during the "working" hours and only run in the 4 hours after the given time.
+ * This is e.g. used for activity expiration, suspicious login training and update checks.
+ *
+ * A value of 1 e.g. will only run these background jobs between 01:00am UTC and 05:00am UTC.
+ *
+ * Defaults to ``100`` which disables the feature
+ */
+'maintenance_window_start' => 1,
+
+/**
+ * Log all LDAP requests into a file
+ *
+ * Warning: This heavily decreases the performance of the server and is only
+ * meant to debug/profile the LDAP interaction manually.
+ * Also, it might log sensitive data into a plain text file.
+ */
+'ldap_log_file' => '',
 
 /**
  * SSL
@@ -1232,9 +1591,9 @@ $CONFIG = [
 	'port' => 6379,
 	'timeout' => 0.0,
 	'read_timeout' => 0.0,
-	'user' =>  '', // Optional, if not defined no password will be used.
-	'password' => '', // Optional, if not defined no password will be used.
-	'dbindex' => 0, // Optional, if undefined SELECT will not run and will use Redis Server's default DB Index.
+	'user' =>  '', // Optional: if not defined, no password will be used.
+	'password' => '', // Optional: if not defined, no password will be used.
+	'dbindex' => 0, // Optional: if undefined SELECT will not run and will use Redis Server's default DB Index.
 	// If redis in-transit encryption is enabled, provide certificates
 	// SSL context https://www.php.net/manual/en/context.ssl.php
 	'ssl_context' => [
@@ -1245,10 +1604,7 @@ $CONFIG = [
 ],
 
 /**
- * Connection details for a Redis Cluster
- *
- * Only for use with Redis Clustering, for Sentinel-based setups use the single
- * server configuration above, and perform HA on the hostname.
+ * Connection details for a Redis Cluster.
  *
  * Redis Cluster support requires the php module phpredis in version 3.0.0 or
  * higher.
@@ -1258,7 +1614,7 @@ $CONFIG = [
  *  - \RedisCluster::FAILOVER_ERROR - failover to slaves for read commands if master is unavailable (recommended)
  *  - \RedisCluster::FAILOVER_DISTRIBUTE - randomly distribute read commands across master and slaves
  *
- * WARNING: FAILOVER_DISTRIBUTE is a not recommended setting and we strongly
+ * WARNING: FAILOVER_DISTRIBUTE is a not recommended setting, and we strongly
  * suggest to not use it if you use Redis for file locking. Due to the way Redis
  * is synchronized it could happen, that the read for an existing lock is
  * scheduled to a slave that is not fully synchronized with the connected master
@@ -1270,15 +1626,15 @@ $CONFIG = [
  * https://github.com/phpredis/phpredis/commit/c5994f2a42b8a348af92d3acb4edff1328ad8ce1
  */
 'redis.cluster' => [
-	'seeds' => [ // provide some/all of the cluster servers to bootstrap discovery, port required
+	'seeds' => [ // provide some or all of the cluster servers to bootstrap discovery, port required
 		'localhost:7000',
 		'localhost:7001',
 	],
 	'timeout' => 0.0,
 	'read_timeout' => 0.0,
 	'failover_mode' => \RedisCluster::FAILOVER_ERROR,
-	'user' =>  '', // Optional, if not defined no password will be used.
-	'password' => '', // Optional, if not defined no password will be used.
+	'user' =>  '', // Optional: if not defined, no password will be used.
+	'password' => '', // Optional: if not defined, no password will be used.
 	// If redis in-transit encryption is enabled, provide certificates
 	// SSL context https://www.php.net/manual/en/context.ssl.php
 	'ssl_context' => [
@@ -1293,7 +1649,8 @@ $CONFIG = [
  * Server details for one or more memcached servers to use for memory caching.
  */
 'memcached_servers' => [
-	// hostname, port and optional weight. Also see:
+	// hostname, port and optional weight
+	// or path and port 0 for unix socket. Also see:
 	// https://www.php.net/manual/en/memcached.addservers.php
 	// https://www.php.net/manual/en/memcached.addserver.php
 	['localhost', 11211],
@@ -1364,12 +1721,11 @@ $CONFIG = [
  * filesystem and encryption will cause severe overhead because key files need
  * to be fetched in addition to any requested file.
  *
- * One way to test is applying for a trystack account at http://trystack.org/
  */
 'objectstore' => [
 	'class' => 'OC\\Files\\ObjectStore\\Swift',
 	'arguments' => [
-		// trystack will use your facebook id as the user name
+		// trystack will use your facebook id as the username
 		'username' => 'facebook100000123456789',
 		// in the trystack dashboard go to user -> settings -> API Password to
 		// generate a password
@@ -1384,6 +1740,8 @@ $CONFIG = [
 		'region' => 'RegionOne',
 		// The Identity / Keystone endpoint
 		'url' => 'http://8.21.28.222:5000/v2.0',
+		// uploadPartSize: size of the uploaded chunks, defaults to 524288000
+		'uploadPartSize' => 524288000,
 		// required on dev-/trystack
 		'tenantName' => 'facebook100000123456789',
 		// dev-/trystack uses swift by default, the lib defaults to 'cloudFiles'
@@ -1432,7 +1790,7 @@ $CONFIG = [
  * ``-preview-NUMBER`` where NUMBER is between 0 and 255.
  *
  * Keep in mind that only previews of files are put in there that don't have
- * some already. Otherwise the old bucket will be used.
+ * some already. Otherwise, the old bucket will be used.
  *
  * To migrate existing previews to this new multibucket distribution of previews
  * use the occ command ``preview:repair``. For now this will only migrate
@@ -1456,6 +1814,18 @@ $CONFIG = [
  * Defaults to ``\OC\Share20\ProviderFactory``
  */
 'sharing.managerFactory' => '\OC\Share20\ProviderFactory',
+
+/**
+ * Enables expiration for link share passwords sent by email (sharebymail).
+ * The passwords will expire after the configured interval, the users can
+ * still request a new one in the public link page.
+ */
+'sharing.enable_mail_link_password_expiration' => false,
+
+/**
+ * Expiration interval for passwords, in seconds.
+ */
+'sharing.mail_link_password_expiration_interval' => 3600,
 
 /**
  * Define max number of results returned by the search for auto-completion of
@@ -1488,14 +1858,27 @@ $CONFIG = [
 'sharing.force_share_accept' => false,
 
 /**
- * Set to false to prevent users from setting a custom share_folder
+ * Set to ``false``, to prevent users from setting a custom share_folder
  */
 'sharing.allow_custom_share_folder' => true,
 
 /**
- * Set to false to stop sending a mail when users receive a share
+ * Define a default folder for shared files and folders other than root.
+ * Changes to this value will only have effect on new shares.
+ *
+ * Defaults to ``/``
+ */
+'share_folder' => '/',
+
+/**
+ * Set to ``false``, to stop sending a mail when users receive a share
  */
 'sharing.enable_share_mail' => true,
+
+/**
+ * Set to true to enable the feature to add exceptions for share password enforcement
+ */
+'sharing.allow_disabled_password_enforcement_groups' => false,
 
 /**
  * Set to true to always transfer incoming shares by default
@@ -1506,15 +1889,67 @@ $CONFIG = [
 'transferIncomingShares' => false,
 
 /**
+ * Federated Cloud Sharing
+ */
+
+ /**
+  * Allow self-signed certificates for federated shares
+  */
+'sharing.federation.allowSelfSignedCertificates' => false,
+
+/**
+ * Hashing
+ */
+
+/**
+ * By default, Nextcloud will use the Argon2 password hashing if available.
+ * However, if for whatever reason you want to stick with the PASSWORD_DEFAULT
+ * of your php version. Then set the setting to true.
+ *
+ * Nextcloud uses the Argon2 algorithm (with PHP >= 7.2) to create hashes by its
+ * own and exposes its configuration options as following. More information can
+ * be found at: https://www.php.net/manual/en/function.password-hash.php
+ */
+'hashing_default_password' => false,
+
+/**
+ * The number of CPU threads to be used by the algorithm for computing a hash.
+ * The value must be an integer, and the minimum value is 1. Rationally it does
+ * not help to provide a number higher than the available threads on the machine.
+ * Values that undershoot the minimum will be ignored in favor of the minimum.
+ */
+'hashingThreads' => PASSWORD_ARGON2_DEFAULT_THREADS,
+
+/**
+ * The memory in KiB to be used by the algorithm for computing a hash. The value
+ * must be an integer, and the minimum value is 8 times the number of CPU threads.
+ * Values that undershoot the minimum will be ignored in favor of the minimum.
+ */
+'hashingMemoryCost' => PASSWORD_ARGON2_DEFAULT_MEMORY_COST,
+
+/**
+ * The number of iterations that are used by the algorithm for computing a hash.
+ * The value must be an integer, and the minimum value is 1. Values that
+ * undershoot the minimum will be ignored in favor of the minimum.
+ */
+'hashingTimeCost' => PASSWORD_ARGON2_DEFAULT_TIME_COST,
+
+/**
+ * The hashing cost used by hashes generated by Nextcloud
+ * Using a higher value requires more time and CPU power to calculate the hashes
+ */
+'hashingCost' => 10,
+
+/**
  * All other configuration options
  */
 
 /**
- * Additional driver options for the database connection, eg. to enable SSL
+ * Additional driver options for the database connection, e.g. to enable SSL
  * encryption in MySQL or specify a custom wait timeout on a cheap hoster.
  *
  * When setting up TLS/SSL for encrypting the connections, you need to ensure that
- * the passed keys and certificates are readable by the PHP process. In addition
+ * the passed keys and certificates are readable by the PHP process. In addition,
  * PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT might need to be set to false, if the
  * database servers certificates CN does not match with the hostname used to connect.
  * The standard behavior here is different from the MySQL/MariaDB CLI client, which
@@ -1556,7 +1991,7 @@ $CONFIG = [
  * Tables will be created with
  *  * character set: utf8mb4
  *  * collation:     utf8mb4_bin
- *  * row_format:    compressed
+ *  * row_format:    dynamic
  *
  * See:
  * https://dev.mysql.com/doc/refman/5.7/en/charset-unicode-utf8mb4.html
@@ -1570,7 +2005,7 @@ $CONFIG = [
 /**
  * For search queries in the database, a default collation – depending on the
  * character set – is chosen. In some cases a different behaviour is desired,
- * for instances when a accent sensitive search is desired.
+ * for instances when an accent sensitive search is desired.
  *
  * MariaDB and MySQL have an overlap in available collations, but also
  * incompatible ones, also depending on the version of the database server.
@@ -1612,72 +2047,73 @@ $CONFIG = [
  * restricted, or if external storage which do not support streaming are in
  * use.
  *
- * The Web server user must have write access to this directory.
+ * The Web server user/PHP must have write access to this directory.
+ * Additionally you have to make sure that your PHP configuration considers this a valid
+ * tmp directory, by setting the TMP, TMPDIR, and TEMP variables to the required directories.
+ * On top of that you might be required to grant additional permissions in AppArmor or SELinux.
  */
 'tempdirectory' => '/tmp/nextcloudtemp',
 
 /**
- * Hashing
- */
-
-/**
- * By default Nextcloud will use the Argon2 password hashing if available.
- * However if for whatever reason you want to stick with the PASSWORD_DEFAULT
- * of your php version. Then set the setting to true.
- */
-'hashing_default_password' => false,
-
-/**
+ * Override where Nextcloud stores update files while updating. Useful in situations
+ * where the default `datadirectory` is on network disk like NFS, or is otherwise
+ * restricted. Defaults to the value of `datadirectory` if unset.
  *
- * Nextcloud uses the Argon2 algorithm (with PHP >= 7.2) to create hashes by its
- * own and exposes its configuration options as following. More information can
- * be found at: https://www.php.net/manual/en/function.password-hash.php
+ * If set, the value MUST be located _outside_ of the installation directory of Nextcloud and
+ * writable by the Web server user.
+ *
  */
+'updatedirectory' => '',
 
 /**
- * The number of CPU threads to be used by the algorithm for computing a hash.
- * The value must be an integer, and the minimum value is 1. Rationally it does
- * not help to provide a number higher than the available threads on the machine.
- * Values that undershoot the minimum will be ignored in favor of the minimum.
- */
-'hashingThreads' => PASSWORD_ARGON2_DEFAULT_THREADS,
-
-/**
- * The memory in KiB to be used by the algorithm for computing a hash. The value
- * must be an integer, and the minimum value is 8 times the number of CPU threads.
- * Values that undershoot the minimum will be ignored in favor of the minimum.
- */
-'hashingMemoryCost' => PASSWORD_ARGON2_DEFAULT_MEMORY_COST,
-
-/**
- * The number of iterations that are used by the algorithm for computing a hash.
- * The value must be an integer, and the minimum value is 1. Values that
- * undershoot the minimum will be ignored in favor of the minimum.
- */
-'hashingTimeCost' => PASSWORD_ARGON2_DEFAULT_TIME_COST,
-
-/**
- * The hashing cost used by hashes generated by Nextcloud
- * Using a higher value requires more time and CPU power to calculate the hashes
- */
-'hashingCost' => 10,
-
-/**
- * Blacklist a specific file or files and disallow the upload of files
- * with this name. ``.htaccess`` is blocked by default.
+ * Block a specific file or files and disallow the upload of files with this name.
+ * This blocks any access to those files (read and write).
+ * ``.htaccess`` is blocked by default.
+ *
  * WARNING: USE THIS ONLY IF YOU KNOW WHAT YOU ARE DOING.
+ *
+ * Note that this list is case-insensitive.
  *
  * Defaults to ``array('.htaccess')``
  */
-'blacklisted_files' => ['.htaccess'],
+'forbidden_filenames' => ['.htaccess'],
 
 /**
- * Define a default folder for shared files and folders other than root.
- * Changes to this value will only have effect on new shares.
+ * Disallow the upload of files with specific basenames.
+ * Matching existing files can no longer be updated and in matching folders no files can be created anymore.
  *
- * Defaults to ``/``
+ * The basename is the name of the file without the extension,
+ * e.g. for "archive.tar.gz" the basename would be "archive".
+ *
+ * Note that this list is case-insensitive.
+ *
+ * Defaults to ``array()``
  */
-'share_folder' => '/',
+'forbidden_filename_basenames' => [],
+
+/**
+ * Block characters from being used in filenames. This is useful if you
+ * have a filesystem or OS which does not support certain characters like windows.
+ * Matching existing files can no longer be updated and in matching folders no files can be created anymore.
+ *
+ * The '/' and '\' characters are always forbidden, as well as all characters in the ASCII range [0-31].
+ *
+ * Example for windows systems: ``array('?', '<', '>', ':', '*', '|', '"')``
+ * see https://en.wikipedia.org/wiki/Comparison_of_file_systems#Limits
+ *
+ * Defaults to ``array()``
+ */
+'forbidden_filename_characters' => [],
+
+/**
+ * Deny extensions from being used for filenames.
+ * Matching existing files can no longer be updated and in matching folders no files can be created anymore.
+ *
+ * The '.part' extension is always forbidden, as this is used internally by Nextcloud.
+ *
+ * Defaults to ``array('.filepart', '.part')``
+ */
+'forbidden_filename_extensions' => ['.part', '.filepart'],
 
 /**
  * If you are applying a theme to Nextcloud, enter the name of the theme here.
@@ -1686,6 +2122,13 @@ $CONFIG = [
  * Defaults to the theming app which is shipped since Nextcloud 9
  */
 'theme' => '',
+
+/**
+ * Enforce the user theme. This will disable the user theming settings
+ * This must be a valid ITheme ID.
+ * E.g. dark, dark-highcontrast, default, light, light-highcontrast, opendyslexic
+ */
+'enforce_theme' => '',
 
 /**
  * The default cipher for encrypting files. Currently supported are:
@@ -1699,18 +2142,36 @@ $CONFIG = [
 'cipher' => 'AES-256-CTR',
 
 /**
+ * Use the legacy base64 format for encrypted files instead of the more space-efficient
+ * binary format. The option affects only newly written files, existing encrypted files
+ * will not be touched and will remain readable whether they use the new format or not.
+ *
+ * Defaults to ``false``
+ */
+'encryption.use_legacy_base64_encoding' => false,
+
+/**
  * The minimum Nextcloud desktop client version that will be allowed to sync with
  * this server instance. All connections made from earlier clients will be denied
  * by the server. Defaults to the minimum officially supported Nextcloud desktop
- * clientversion at the time of release of this server version.
+ * client version at the time of release of this server version.
  *
  * When changing this, note that older unsupported versions of the Nextcloud desktop
  * client may not function as expected, and could lead to permanent data loss for
  * clients or other unexpected results.
  *
- * Defaults to ``2.0.0``
+ * Defaults to ``2.7.0``
  */
-'minimum.supported.desktop.version' => '2.0.0',
+'minimum.supported.desktop.version' => '2.7.0',
+
+/**
+ * The maximum Nextcloud desktop client version that will be allowed to sync with
+ * this server instance. All connections made from later clients will be denied
+ * by the server.
+ *
+ * Defaults to 99.99.99
+ */
+'maximum.supported.desktop.version' => '99.99.99',
 
 /**
  * Option to allow local storage to contain symlinks.
@@ -1720,6 +2181,26 @@ $CONFIG = [
  * Defaults to ``false``
  */
 'localstorage.allowsymlinks' => false,
+
+/**
+ * Nextcloud overrides umask to ensure suitable access permissions
+ * regardless of webserver/php-fpm configuration and worker state.
+ * WARNING: Modifying this value has security implications and
+ * may soft-break the installation.
+ *
+ * Most installs shall not modify this value.
+ *
+ * Defaults to ``0022``
+ */
+'localstorage.umask' => 0022,
+
+/**
+ * This options allows storage systems that don't allow to modify existing files
+ * to overcome this limitation by removing the files before overwriting.
+ *
+ * Defaults to ``false``
+ */
+'localstorage.unlink_on_truncate' => false,
 
 /**
  * EXPERIMENTAL: option whether to include external storage in quota
@@ -1741,6 +2222,19 @@ $CONFIG = [
 'external_storage.auth_availability_delay' => 1800,
 
 /**
+ * Allows to create external storages of type "Local" in the web interface and APIs.
+ *
+ * When disabled, it is still possible to create local storages with occ using
+ * the following command:
+ *
+ * % php occ files_external:create /mountpoint local null::null -c datadir=/path/to/data
+ *
+ * Defaults to ``true``
+ *
+ */
+'files_external_allow_create_new_local' => true,
+
+/**
  * Specifies how often the local filesystem (the Nextcloud data/ directory, and
  * NFS mounts in data/) is checked for changes made outside Nextcloud. This
  * does not apply to external storage.
@@ -1757,7 +2251,7 @@ $CONFIG = [
 'filesystem_check_changes' => 0,
 
 /**
- * By default Nextcloud will store the part files created during upload in the
+ * By default, Nextcloud will store the part files created during upload in the
  * same storage as the upload target. Setting this to false will store the part
  * files in the root of the users folder which might be required to work with certain
  * external storage setups that have limited rename capabilities.
@@ -1783,21 +2277,13 @@ $CONFIG = [
 'filesystem_cache_readonly' => false,
 
 /**
- * Secret used by Nextcloud for various purposes, e.g. to encrypt data. If you
- * lose this string there will be data corruption.
- */
-'secret' => '',
-
-/**
  * List of trusted proxy servers
  *
  * You may set this to an array containing a combination of
  * - IPv4 addresses, e.g. `192.168.2.123`
  * - IPv4 ranges in CIDR notation, e.g. `192.168.2.0/24`
  * - IPv6 addresses, e.g. `fd9e:21a7:a92c:2323::1`
- *
- * _(CIDR notation for IPv6 is currently work in progress and thus not
- * available as of yet)_
+ * - IPv6 ranges in CIDR notation, e.g. `2001:db8:85a3:8d3:1319:8a20::/95`
  *
  * When an incoming request's `REMOTE_ADDR` matches any of the IP addresses
  * specified here, it is assumed to be a proxy instead of a client. Thus, the
@@ -1825,6 +2311,16 @@ $CONFIG = [
 'forwarded_for_headers' => ['HTTP_X_FORWARDED', 'HTTP_FORWARDED_FOR'],
 
 /**
+ * List of trusted IP ranges for admin actions
+ *
+ * If this list is non-empty, all admin actions must be triggered from
+ * IP addresses inside theses ranges.
+ *
+ * Defaults to an empty array.
+ */
+'allowed_admin_ranges' => ['192.0.2.42/32', '233.252.0.0/24', '2001:db8::13:37/64'],
+
+/**
  * max file size for animating gifs on public-sharing-site.
  * If the gif is bigger, it'll show a static preview
  *
@@ -1834,21 +2330,6 @@ $CONFIG = [
  * Defaults to ``10`` megabytes
  */
 'max_filesize_animated_gifs_public_sharing' => 10,
-
-
-/**
- * Enables transactional file locking.
- * This is enabled by default.
- *
- * Prevents concurrent processes from accessing the same files
- * at the same time. Can help prevent side effects that would
- * be caused by concurrent operations. Mainly relevant for
- * very large installations with many users working with
- * shared files.
- *
- * Defaults to ``true``
- */
-'filelocking.enabled' => true,
 
 /**
  * Set the lock's time-to-live in seconds.
@@ -1885,6 +2366,16 @@ $CONFIG = [
  * Disable the web based updater
  */
 'upgrade.disable-web' => false,
+
+/**
+ * Allows to modify the cli-upgrade link in order to link to a different documentation
+ */
+'upgrade.cli-upgrade-link' => '',
+
+/**
+ * Allows to modify the exception server logs documentation link in order to link to a different documentation
+ */
+'documentation_url.server_logs' => '',
 
 /**
  * Set this Nextcloud instance to debugging mode
@@ -1932,7 +2423,7 @@ $CONFIG = [
 
 /**
  * by default federation is only used internally in a Global Scale setup
- * If you want to allow federation outside of your environment set it to 'global'
+ * If you want to allow federation outside your environment set it to 'global'
  */
 'gs.federation' => 'internal',
 
@@ -1949,7 +2440,7 @@ $CONFIG = [
 ],
 
 /**
- * By default there is on public pages a link shown that allows users to
+ * By default, there is on public pages a link shown that allows users to
  * learn about the "simple sign up" - see https://nextcloud.com/signup/
  *
  * If this is set to "false" it will not show the link.
@@ -1957,7 +2448,7 @@ $CONFIG = [
 'simpleSignUpLink.shown' => true,
 
 /**
- * By default autocompletion is enabled for the login form on Nextcloud's login page.
+ * By default, autocompletion is enabled for the login form on Nextcloud's login page.
  * While this is enabled, browsers are allowed to "remember" login names and such.
  * Some companies require it to be disabled to comply with their security policy.
  *
@@ -1965,4 +2456,170 @@ $CONFIG = [
  */
 
 'login_form_autocomplete' => true,
+
+/**
+ * Timeout for the login form, after this time the login form is reset.
+ * This prevents password leaks on public devices if the user forgots to clear the form.
+ *
+ * Default is 5 minutes (300 seconds), a value of 0 means no timeout.
+ */
+'login_form_timeout' => 300,
+
+/**
+ * If your user is using an outdated or unsupported browser, a warning will be shown
+ * to offer some guidance to upgrade or switch and ensure a proper Nextcloud experience.
+ * They can still bypass it after they have read the warning.
+ *
+ * Simply set this property to "true", if you want to turn this feature off.
+ */
+
+'no_unsupported_browser_warning' => false,
+
+/**
+ * Disable background scanning of files
+ *
+ * By default, a background job runs every 10 minutes and execute a background
+ * scan to sync filesystem and database. Only users with unscanned files
+ * (size < 0 in filecache) are included. Maximum 500 users per job.
+ *
+ * Defaults to ``false``
+ */
+'files_no_background_scan' => false,
+
+/**
+ * Log all queries into a file
+ *
+ * Warning: This heavily decreases the performance of the server and is only
+ * meant to debug/profile the query interaction manually.
+ * Also, it might log sensitive data into a plain text file.
+ */
+'query_log_file' => '',
+
+/**
+ * Log all redis requests into a file
+ *
+ * Warning: This heavily decreases the performance of the server and is only
+ * meant to debug/profile the redis interaction manually.
+ * Also, it might log sensitive data into a plain text file.
+ */
+'redis_log_file' => '',
+
+/**
+ * Enable diagnostics event logging
+ *
+ * If enabled the timings of common execution steps will be logged to the
+ * Nextcloud log at debug level. log.condition is useful to enable this on
+ * production systems to only log under some conditions
+ */
+'diagnostics.logging' => true,
+
+/**
+ * Limit diagnostics event logging to events longer than the configured threshold in ms
+ *
+ * when set to 0 no diagnostics events will be logged
+ */
+'diagnostics.logging.threshold' => 0,
+
+/**
+ * Enable profile globally
+ *
+ * Defaults to ``true``
+ */
+'profile.enabled' => true,
+
+/**
+ * Allows to override the default scopes for Account data.
+ * The list of overridable properties and valid values for scopes are in
+ * ``OCP\Accounts\IAccountManager``. Values added here are merged with
+ * default values, which are in ``OC\Accounts\AccountManager``.
+ *
+ * For instance, if the phone property should default to the private scope
+ * instead of the local one:
+ *
+ * ::
+ *
+ * 	[
+ * 	  \OCP\Accounts\IAccountManager::PROPERTY_PHONE => \OCP\Accounts\IAccountManager::SCOPE_PRIVATE
+ * 	]
+ *
+ */
+'account_manager.default_property_scope' => [],
+
+/**
+ * Enable the deprecated Projects feature,
+ * superseded by Related resources as of Nextcloud 25
+ *
+ * Defaults to ``false``
+ */
+'projects.enabled' => false,
+
+/**
+ * Enable the bulk upload feature.
+ *
+ * Defaults to ``true``
+ */
+'bulkupload.enabled' => true,
+
+/**
+ * Enables fetching open graph metadata from remote urls
+ *
+ * Defaults to ``true``
+ */
+'reference_opengraph' => true,
+
+/**
+ * Enable use of old unified search
+ *
+ * Defaults to ``false``
+ */
+'unified_search.enabled' => false,
+
+/**
+ * Enable features that don't respect accessibility standards yet.
+ *
+ * Defaults to ``true``
+ */
+'enable_non-accessible_features' => true,
+
+/**
+ * Directories where nextcloud looks for binaries.
+ * This is used to find external binaries like libreoffice, sendmail, ffmpeg and more.
+ *
+ * Defaults to ``['/usr/local/sbin','/usr/local/bin','/usr/sbin','/usr/bin','/sbin','/bin','/opt/bin']``
+ */
+'binary_search_paths' => [
+	'/usr/local/sbin',
+	'/usr/local/bin',
+	'/usr/sbin',
+	'/usr/bin',
+	'/sbin',
+	'/bin',
+	'/opt/bin',
+],
+
+/**
+ * The maximum chunk size to use for chunked uploads.
+ * A bigger chunk size results in higher throughput, but above 100 MiB there are only diminishing returns,
+ * while services like Cloudflare already limit to 100 MiB.
+ *
+ * Defaults to 100 MiB.
+ */
+'files.chunked_upload.max_size' => 100 * 1024 * 1024,
+
+/**
+ * The maximum number of chunks uploaded in parallel during chunked uploads.
+ * A bigger count results in higher throughput, but will also consume more server workers,
+ * while the improvements diminish.
+ *
+ * Defaults to 5.
+ */
+'files.chunked_upload.max_parallel_count' => 5,
+
+/**
+ * Allow users to manually delete files from their trashbin.
+ * Automated deletions are not affected and will continue to work in cases like low remaining quota for example.
+ *
+ * Defaults to true.
+ */
+'files.trash.delete' => true,
 ];

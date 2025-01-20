@@ -1,30 +1,8 @@
 <?php
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- * @copyright Copyright (c) 2020, Gary Kim <gary@garykim.dev>
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Gary Kim <gary@garykim.dev>
- * @author Georg Ehrke <oc.list@georgehrke.com>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2020 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 namespace OCA\DAV\Tests\unit\CalDAV;
 
@@ -33,6 +11,8 @@ use OCA\DAV\CalDAV\CalDavBackend;
 use OCA\DAV\CalDAV\Calendar;
 use OCP\IConfig;
 use OCP\IL10N;
+use PHPUnit\Framework\MockObject\MockObject;
+use Psr\Log\LoggerInterface;
 use Sabre\DAV\PropPatch;
 use Sabre\VObject\Reader;
 use Test\TestCase;
@@ -45,11 +25,15 @@ class CalendarTest extends TestCase {
 	/** @var IConfig */
 	protected $config;
 
+	/** @var MockObject|LoggerInterface */
+	protected $logger;
+
 	protected function setUp(): void {
 		parent::setUp();
 		$this->l10n = $this->getMockBuilder(IL10N::class)
 			->disableOriginalConstructor()->getMock();
 		$this->config = $this->createMock(IConfig::class);
+		$this->logger = $this->createMock(LoggerInterface::class);
 		$this->l10n
 			->expects($this->any())
 			->method('t')
@@ -58,8 +42,8 @@ class CalendarTest extends TestCase {
 			});
 	}
 
-	public function testDelete() {
-		/** @var \PHPUnit\Framework\MockObject\MockObject | CalDavBackend $backend */
+	public function testDelete(): void {
+		/** @var MockObject | CalDavBackend $backend */
 		$backend = $this->getMockBuilder(CalDavBackend::class)->disableOriginalConstructor()->getMock();
 		$backend->expects($this->once())->method('updateShares');
 		$backend->expects($this->any())->method('getShares')->willReturn([
@@ -71,17 +55,15 @@ class CalendarTest extends TestCase {
 			'id' => 666,
 			'uri' => 'cal',
 		];
-		$c = new Calendar($backend, $calendarInfo, $this->l10n, $this->config);
+		$c = new Calendar($backend, $calendarInfo, $this->l10n, $this->config, $this->logger);
 		$c->delete();
 	}
 
 
-	public function testDeleteFromGroup() {
-		$this->expectException(\Sabre\DAV\Exception\Forbidden::class);
-
-		/** @var \PHPUnit\Framework\MockObject\MockObject | CalDavBackend $backend */
+	public function testDeleteFromGroup(): void {
+		/** @var MockObject | CalDavBackend $backend */
 		$backend = $this->getMockBuilder(CalDavBackend::class)->disableOriginalConstructor()->getMock();
-		$backend->expects($this->never())->method('updateShares');
+		$backend->expects($this->once())->method('updateShares');
 		$backend->expects($this->any())->method('getShares')->willReturn([
 			['href' => 'principal:group2']
 		]);
@@ -91,12 +73,12 @@ class CalendarTest extends TestCase {
 			'id' => 666,
 			'uri' => 'cal',
 		];
-		$c = new Calendar($backend, $calendarInfo, $this->l10n, $this->config);
+		$c = new Calendar($backend, $calendarInfo, $this->l10n, $this->config, $this->logger);
 		$c->delete();
 	}
 
-	public function testDeleteOwn() {
-		/** @var \PHPUnit\Framework\MockObject\MockObject | CalDavBackend $backend */
+	public function testDeleteOwn(): void {
+		/** @var MockObject | CalDavBackend $backend */
 		$backend = $this->createMock(CalDavBackend::class);
 		$backend->expects($this->never())->method('updateShares');
 		$backend->expects($this->never())->method('getShares');
@@ -112,12 +94,12 @@ class CalendarTest extends TestCase {
 			'id' => 666,
 			'uri' => 'cal',
 		];
-		$c = new Calendar($backend, $calendarInfo, $this->l10n, $this->config);
+		$c = new Calendar($backend, $calendarInfo, $this->l10n, $this->config, $this->logger);
 		$c->delete();
 	}
 
-	public function testDeleteBirthdayCalendar() {
-		/** @var \PHPUnit\Framework\MockObject\MockObject | CalDavBackend $backend */
+	public function testDeleteBirthdayCalendar(): void {
+		/** @var MockObject | CalDavBackend $backend */
 		$backend = $this->createMock(CalDavBackend::class);
 		$backend->expects($this->once())->method('deleteCalendar')
 			->with(666);
@@ -131,9 +113,10 @@ class CalendarTest extends TestCase {
 			'principaluri' => 'principals/users/user1',
 			'id' => 666,
 			'uri' => 'contact_birthdays',
+			'{DAV:}displayname' => 'Test',
 		];
 
-		$c = new Calendar($backend, $calendarInfo, $this->l10n, $this->config);
+		$c = new Calendar($backend, $calendarInfo, $this->l10n, $this->config, $this->logger);
 		$c->delete();
 	}
 
@@ -167,8 +150,8 @@ class CalendarTest extends TestCase {
 	/**
 	 * @dataProvider dataPropPatch
 	 */
-	public function testPropPatch($ownerPrincipal, $principalUri, $mutations, $shared) {
-		/** @var \PHPUnit\Framework\MockObject\MockObject | CalDavBackend $backend */
+	public function testPropPatch($ownerPrincipal, $principalUri, $mutations, $shared): void {
+		/** @var MockObject | CalDavBackend $backend */
 		$backend = $this->getMockBuilder(CalDavBackend::class)->disableOriginalConstructor()->getMock();
 		$calendarInfo = [
 			'{http://owncloud.org/ns}owner-principal' => $ownerPrincipal,
@@ -176,7 +159,7 @@ class CalendarTest extends TestCase {
 			'id' => 666,
 			'uri' => 'default'
 		];
-		$c = new Calendar($backend, $calendarInfo, $this->l10n, $this->config);
+		$c = new Calendar($backend, $calendarInfo, $this->l10n, $this->config, $this->logger);
 		$propPatch = new PropPatch($mutations);
 
 		if (!$shared) {
@@ -191,8 +174,8 @@ class CalendarTest extends TestCase {
 	/**
 	 * @dataProvider providesReadOnlyInfo
 	 */
-	public function testAcl($expectsWrite, $readOnlyValue, $hasOwnerSet, $uri = 'default') {
-		/** @var \PHPUnit\Framework\MockObject\MockObject | CalDavBackend $backend */
+	public function testAcl($expectsWrite, $readOnlyValue, $hasOwnerSet, $uri = 'default'): void {
+		/** @var MockObject | CalDavBackend $backend */
 		$backend = $this->getMockBuilder(CalDavBackend::class)->disableOriginalConstructor()->getMock();
 		$backend->expects($this->any())->method('applyShareAcl')->willReturnArgument(1);
 		$calendarInfo = [
@@ -200,13 +183,14 @@ class CalendarTest extends TestCase {
 			'id' => 666,
 			'uri' => $uri
 		];
+		$calendarInfo['{DAV:}displayname'] = 'Test';
 		if (!is_null($readOnlyValue)) {
 			$calendarInfo['{http://owncloud.org/ns}read-only'] = $readOnlyValue;
 		}
 		if ($hasOwnerSet) {
 			$calendarInfo['{http://owncloud.org/ns}owner-principal'] = 'user1';
 		}
-		$c = new Calendar($backend, $calendarInfo, $this->l10n, $this->config);
+		$c = new Calendar($backend, $calendarInfo, $this->l10n, $this->config, $this->logger);
 		$acl = $c->getACL();
 		$childAcl = $c->getChildACL();
 
@@ -294,12 +278,12 @@ class CalendarTest extends TestCase {
 	 * @param int $expectedChildren
 	 * @param bool $isShared
 	 */
-	public function testPrivateClassification($expectedChildren, $isShared) {
+	public function testPrivateClassification($expectedChildren, $isShared): void {
 		$calObject0 = ['uri' => 'event-0', 'classification' => CalDavBackend::CLASSIFICATION_PUBLIC];
 		$calObject1 = ['uri' => 'event-1', 'classification' => CalDavBackend::CLASSIFICATION_CONFIDENTIAL];
 		$calObject2 = ['uri' => 'event-2', 'classification' => CalDavBackend::CLASSIFICATION_PRIVATE];
 
-		/** @var \PHPUnit\Framework\MockObject\MockObject | CalDavBackend $backend */
+		/** @var MockObject | CalDavBackend $backend */
 		$backend = $this->getMockBuilder(CalDavBackend::class)->disableOriginalConstructor()->getMock();
 		$backend->expects($this->any())->method('getCalendarObjects')->willReturn([
 			$calObject0, $calObject1, $calObject2
@@ -322,7 +306,7 @@ class CalendarTest extends TestCase {
 		if ($isShared) {
 			$calendarInfo['{http://owncloud.org/ns}owner-principal'] = 'user1';
 		}
-		$c = new Calendar($backend, $calendarInfo, $this->l10n, $this->config);
+		$c = new Calendar($backend, $calendarInfo, $this->l10n, $this->config, $this->logger);
 		$children = $c->getChildren();
 		$this->assertEquals($expectedChildren, count($children));
 		$children = $c->getMultipleChildren(['event-0', 'event-1', 'event-2']);
@@ -336,7 +320,7 @@ class CalendarTest extends TestCase {
 	 * @param int $expectedChildren
 	 * @param bool $isShared
 	 */
-	public function testConfidentialClassification($expectedChildren, $isShared) {
+	public function testConfidentialClassification($expectedChildren, $isShared): void {
 		$start = '20160609';
 		$end = '20160610';
 
@@ -386,7 +370,7 @@ EOD;
 		$calObject1 = ['uri' => 'event-1', 'classification' => CalDavBackend::CLASSIFICATION_CONFIDENTIAL, 'calendardata' => $calData];
 		$calObject2 = ['uri' => 'event-2', 'classification' => CalDavBackend::CLASSIFICATION_PRIVATE];
 
-		/** @var \PHPUnit\Framework\MockObject\MockObject | CalDavBackend $backend */
+		/** @var MockObject | CalDavBackend $backend */
 		$backend = $this->getMockBuilder(CalDavBackend::class)->disableOriginalConstructor()->getMock();
 		$backend->expects($this->any())->method('getCalendarObjects')->willReturn([
 			$calObject0, $calObject1, $calObject2
@@ -406,7 +390,7 @@ EOD;
 			'id' => 666,
 			'uri' => 'cal',
 		];
-		$c = new Calendar($backend, $calendarInfo, $this->l10n, $this->config);
+		$c = new Calendar($backend, $calendarInfo, $this->l10n, $this->config, $this->logger);
 
 		$this->assertEquals(count($c->getChildren()), $expectedChildren);
 
@@ -434,12 +418,12 @@ EOD;
 			$l10n->expects($this->once())
 				->method('t')
 				->with('Busy')
-				->willReturn("Translated busy");
+				->willReturn('Translated busy');
 		} else {
 			$l10n->expects($this->never())
 				->method('t');
 		}
-		$c = new Calendar($backend, $calendarInfo, $l10n, $this->config);
+		$c = new Calendar($backend, $calendarInfo, $l10n, $this->config, $this->logger);
 
 		$calData = $c->getChild('event-1')->get();
 		$event = Reader::read($calData);
@@ -458,7 +442,7 @@ EOD;
 		];
 	}
 
-	public function testRemoveVAlarms() {
+	public function testRemoveVAlarms(): void {
 		$publicObjectData = <<<EOD
 BEGIN:VCALENDAR
 VERSION:2.0
@@ -554,7 +538,7 @@ EOD;
 			'classification' => CalDavBackend::CLASSIFICATION_CONFIDENTIAL,
 			'calendardata' => $confidentialObjectData];
 
-		/** @var \PHPUnit\Framework\MockObject\MockObject | CalDavBackend $backend */
+		/** @var MockObject | CalDavBackend $backend */
 		$backend = $this->createMock(CalDavBackend::class);
 		$backend->expects($this->any())
 			->method('getCalendarObjects')
@@ -604,13 +588,13 @@ EOD;
 			'uri' => 'cal',
 		];
 
-		$ownerCalendar = new Calendar($backend, $calendarInfoOwner, $this->l10n, $this->config);
-		$rwCalendar = new Calendar($backend, $calendarInfoSharedRW, $this->l10n, $this->config);
-		$roCalendar = new Calendar($backend, $calendarInfoSharedRO, $this->l10n, $this->config);
+		$ownerCalendar = new Calendar($backend, $calendarInfoOwner, $this->l10n, $this->config, $this->logger);
+		$rwCalendar = new Calendar($backend, $calendarInfoSharedRW, $this->l10n, $this->config, $this->logger);
+		$roCalendar = new Calendar($backend, $calendarInfoSharedRO, $this->l10n, $this->config, $this->logger);
 
-		$this->assertEquals(count($ownerCalendar->getChildren()), 2);
-		$this->assertEquals(count($rwCalendar->getChildren()), 2);
-		$this->assertEquals(count($roCalendar->getChildren()), 2);
+		$this->assertCount(2, $ownerCalendar->getChildren());
+		$this->assertCount(2, $rwCalendar->getChildren());
+		$this->assertCount(2, $roCalendar->getChildren());
 
 		// calendar data shall not be altered for the owner
 		$this->assertEquals($ownerCalendar->getChild('event-0')->get(), $publicObjectData);

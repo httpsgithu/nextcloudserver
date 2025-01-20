@@ -1,32 +1,16 @@
-/**
- * @copyright Copyright (c) 2018, John Molakvoæ (skjnldsv@protonmail.com)
- *
- * @author John Molakvoæ (skjnldsv) <skjnldsv@protonmail.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- */
+@use 'sass:color';
 
- // SCSS darken/lighten function override
+/*!
+ * SPDX-FileCopyrightText: 2018 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+// SCSS darken/lighten function override
 @function nc-darken($color, $value) {
-	@return darken($color, $value);
+	@return color.adjust($color, $lightness: - $value, $space: hsl);
 }
 
 @function nc-lighten($color, $value) {
-	@return lighten($color, $value);
+	@return color.adjust($color, $lightness: $value, $space: hsl);
 }
 
 // SCSS variables
@@ -44,17 +28,26 @@ $color-placeholder-light: nc-darken($color-main-background, 10%) !default;
 $color-placeholder-dark: nc-darken($color-main-background, 20%) !default;
 
 $color-primary: #0082c9 !default;
-$color-primary-light: mix($color-primary, $color-main-background, 10%) !default;
+$color-primary-hover: color.mix($color-primary, $color-main-background, 80%) !default;
+
+$color-primary-light: color.mix($color-primary, $color-main-background, 10%) !default;
+$color-primary-light-text: $color-primary !default;
+$color-primary-light-hover: color.mix($color-primary-light, $color-main-text, 95%) !default;
+
 $color-primary-text: #ffffff !default;
 // do not use nc-darken/lighten in case of overriding because
 // primary-text is independent of color-main-text
-$color-primary-text-dark: darken($color-primary-text, 7%) !default;
+$color-primary-element-text-dark: color.adjust($color-primary-text, $lightness: -7%, $space: hsl) !default;
 $color-primary-element: $color-primary !default;
-$color-primary-element-light: lighten($color-primary-element, 15%) !default;
+$color-primary-element-hover: color.mix($color-primary-element, $color-main-background, 80%) !default;
+$color-primary-element-light: color.adjust($color-primary-element, $lightness: 15%, $space: hsl) !default;
 
 $color-error: #e9322d;
+$color-error-hover: color.mix($color-error, $color-main-background, 80%) !default;
 $color-warning: #eca700;
+$color-warning-hover: color.mix($color-warning, $color-main-background, 80%) !default;
 $color-success: #46ba61;
+$color-success-hover: color.mix($color-success, $color-main-background, 80%) !default;
 // used for svg
 $color-white: #fff;
 $color-black: #000;
@@ -75,18 +68,19 @@ $image-favicon: url('../img/logo/logo.svg?v=1') !default;
 $color-loading-light: #ccc !default;
 $color-loading-dark: #444 !default;
 
-$color-box-shadow: transparentize(nc-darken($color-main-background, 70%), 0.5) !default;
+$color-box-shadow: color.adjust(nc-darken($color-main-background, 70%), $alpha: -0.5, $space: hsl) !default;
 
 // light border like file table or app-content list
 $color-border: nc-darken($color-main-background, 7%) !default;
 // darker border like inputs or very visible elements
 $color-border-dark: nc-darken($color-main-background, 14%) !default;
+
 $border-radius: 3px !default;
 $border-radius-large: 10px !default;
 // Pill-style button, value is large so big buttons also have correct roundness
 $border-radius-pill: 100px !default;
 
-$font-face: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Cantarell, Ubuntu, 'Helvetica Neue', Arial, 'Noto Color Emoji', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol' !default;
+$font-face: system-ui, -apple-system, "Segoe UI", Roboto, Oxygen-Sans, Cantarell, Ubuntu, "Helvetica Neue", "Noto Sans", "Liberation Sans", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji" !default;
 $default-font-size: 15px;
 
 $default-line-height: 24px;
@@ -101,6 +95,8 @@ $sidebar-min-width: 300px;
 $sidebar-max-width: 500px;
 $list-min-width: 200px;
 $list-max-width: 300px;
+$header-menu-item-height: 44px;
+$header-menu-profile-item-height: 66px;
 
 // mobile. Keep in sync with core/js/js.js
 $breakpoint-mobile: 1024px;

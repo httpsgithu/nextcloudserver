@@ -1,9 +1,8 @@
 <?php
 /**
- * Copyright (c) 2013 Robin Appelman <icewind@owncloud.com>
- * This file is licensed under the Affero General Public License version 3 or
- * later.
- * See the COPYING-README file.
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace Test\Files\Node;
@@ -11,13 +10,17 @@ namespace Test\Files\Node;
 use OC\Files\FileInfo;
 use OC\Files\Mount\Manager;
 use OC\Files\View;
+use OC\Memcache\ArrayCache;
+use OCP\EventDispatcher\IEventDispatcher;
 use OCP\Files\IRootFolder;
+use OCP\Files\Mount\IMountPoint;
 use OCP\Files\Node;
 use OCP\Files\NotFoundException;
-use OCP\Files\Storage;
-use OCP\ILogger;
+use OCP\Files\Storage\IStorage;
+use OCP\ICacheFactory;
 use OCP\IUser;
 use OCP\IUserManager;
+use Psr\Log\LoggerInterface;
 
 /**
  * Class NodeTest
@@ -35,10 +38,14 @@ abstract class NodeTest extends \Test\TestCase {
 	protected $root;
 	/** @var \OCP\Files\Config\IUserMountCache|\PHPUnit\Framework\MockObject\MockObject */
 	protected $userMountCache;
-	/** @var ILogger|\PHPUnit\Framework\MockObject\MockObject */
+	/** @var LoggerInterface|\PHPUnit\Framework\MockObject\MockObject */
 	protected $logger;
 	/** @var IUserManager|\PHPUnit\Framework\MockObject\MockObject */
 	protected $userManager;
+	/** @var IEventDispatcher|\PHPUnit\Framework\MockObject\MockObject */
+	protected $eventDispatcher;
+	/** @var ICacheFactory|\PHPUnit\Framework\MockObject\MockObject */
+	protected $cacheFactory;
 
 	protected function setUp(): void {
 		parent::setUp();
@@ -50,14 +57,34 @@ abstract class NodeTest extends \Test\TestCase {
 		$this->view = $this->getMockBuilder(View::class)
 			->disableOriginalConstructor()
 			->getMock();
+		$this->view->expects($this->any())
+			->method('getRoot')
+			->willReturn('');
 		$this->userMountCache = $this->getMockBuilder('\OCP\Files\Config\IUserMountCache')
 			->disableOriginalConstructor()
 			->getMock();
-		$this->logger = $this->createMock(ILogger::class);
+		$this->logger = $this->createMock(LoggerInterface::class);
 		$this->userManager = $this->createMock(IUserManager::class);
+		$this->eventDispatcher = $this->createMock(IEventDispatcher::class);
+		$this->cacheFactory = $this->createMock(ICacheFactory::class);
+		$this->cacheFactory->method('createLocal')
+			->willReturnCallback(function () {
+				return new ArrayCache();
+			});
 		$this->root = $this->getMockBuilder('\OC\Files\Node\Root')
-			->setConstructorArgs([$this->manager, $this->view, $this->user, $this->userMountCache, $this->logger, $this->userManager])
+			->setConstructorArgs([$this->manager, $this->view, $this->user, $this->userMountCache, $this->logger, $this->userManager, $this->eventDispatcher, $this->cacheFactory])
 			->getMock();
+	}
+
+	/**
+	 * @return \OC\Files\View | \PHPUnit\Framework\MockObject\MockObject $view
+	 */
+	protected function getRootViewMock() {
+		$view = $this->createMock(View::class);
+		$view->expects($this->any())
+			->method('getRoot')
+			->willReturn('');
+		return $view;
 	}
 
 	/**
@@ -66,7 +93,7 @@ abstract class NodeTest extends \Test\TestCase {
 	 * @param string $path
 	 * @return Node
 	 */
-	abstract protected function createTestNode($root, $view, $path);
+	abstract protected function createTestNode($root, $view, $path, array $data = [], $internalPath = '', $storage = null);
 
 	/**
 	 * @return string
@@ -84,7 +111,7 @@ abstract class NodeTest extends \Test\TestCase {
 	abstract protected function getViewDeleteMethod();
 
 	protected function getMockStorage() {
-		$storage = $this->getMockBuilder(Storage::class)
+		$storage = $this->getMockBuilder(IStorage::class)
 			->disableOriginalConstructor()
 			->getMock();
 		$storage->expects($this->any())
@@ -93,11 +120,14 @@ abstract class NodeTest extends \Test\TestCase {
 		return $storage;
 	}
 
-	protected function getFileInfo($data) {
-		return new FileInfo('', $this->getMockStorage(), '', $data, null);
+	protected function getFileInfo($data, $internalPath = '', $storage = null) {
+		$mount = $this->createMock(IMountPoint::class);
+		$mount->method('getStorage')
+			->willReturn($storage);
+		return new FileInfo('', $this->getMockStorage(), $internalPath, $data, $mount);
 	}
 
-	public function testDelete() {
+	public function testDelete(): void {
 		$this->root->expects($this->exactly(2))
 			->method('emit')
 			->willReturn(true);
@@ -119,7 +149,7 @@ abstract class NodeTest extends \Test\TestCase {
 		$node->delete();
 	}
 
-	public function testDeleteHooks() {
+	public function testDeleteHooks(): void {
 		$test = $this;
 		$hooksRun = 0;
 		/**
@@ -151,7 +181,9 @@ abstract class NodeTest extends \Test\TestCase {
 			$this->user,
 			$this->userMountCache,
 			$this->logger,
-			$this->userManager
+			$this->userManager,
+			$this->eventDispatcher,
+			$this->cacheFactory,
 		);
 
 		$root->listen('\OC\Files', 'preDelete', $preListener);
@@ -160,17 +192,12 @@ abstract class NodeTest extends \Test\TestCase {
 		$this->view->expects($this->any())
 			->method('getFileInfo')
 			->with('/bar/foo')
-			->willReturn($this->getFileInfo(['permissions' => \OCP\Constants::PERMISSION_ALL, 'fileid' => 1, 'mimetype' => 'text/plain']));
+			->willReturn($this->getFileInfo(['permissions' => \OCP\Constants::PERMISSION_ALL, 'fileid' => 1, 'mimetype' => 'text/plain'], 'foo'));
 
 		$this->view->expects($this->once())
 			->method($this->getViewDeleteMethod())
 			->with('/bar/foo')
 			->willReturn(true);
-
-		$this->view->expects($this->any())
-			->method('resolvePath')
-			->with('/bar/foo')
-			->willReturn([null, 'foo']);
 
 		$node = $this->createTestNode($root, $this->view, '/bar/foo');
 		$node->delete();
@@ -178,7 +205,7 @@ abstract class NodeTest extends \Test\TestCase {
 	}
 
 
-	public function testDeleteNotPermitted() {
+	public function testDeleteNotPermitted(): void {
 		$this->expectException(\OCP\Files\NotPermittedException::class);
 
 		$this->root->expects($this->any())
@@ -195,7 +222,7 @@ abstract class NodeTest extends \Test\TestCase {
 	}
 
 
-	public function testStat() {
+	public function testStat(): void {
 		$this->root->expects($this->any())
 			->method('getUser')
 			->willReturn($this->user);
@@ -217,7 +244,7 @@ abstract class NodeTest extends \Test\TestCase {
 		$this->assertEquals($stat, $node->stat());
 	}
 
-	public function testGetId() {
+	public function testGetId(): void {
 		$this->root->expects($this->any())
 			->method('getUser')
 			->willReturn($this->user);
@@ -238,7 +265,7 @@ abstract class NodeTest extends \Test\TestCase {
 		$this->assertEquals(1, $node->getId());
 	}
 
-	public function testGetSize() {
+	public function testGetSize(): void {
 		$this->root->expects($this->any())
 			->method('getUser')
 			->willReturn($this->user);
@@ -260,7 +287,7 @@ abstract class NodeTest extends \Test\TestCase {
 		$this->assertEquals(100, $node->getSize());
 	}
 
-	public function testGetEtag() {
+	public function testGetEtag(): void {
 		$this->root->expects($this->any())
 			->method('getUser')
 			->willReturn($this->user);
@@ -281,7 +308,7 @@ abstract class NodeTest extends \Test\TestCase {
 		$this->assertEquals('qwerty', $node->getEtag());
 	}
 
-	public function testGetMTime() {
+	public function testGetMTime(): void {
 		$this->root->expects($this->any())
 			->method('getUser')
 			->willReturn($this->user);
@@ -302,7 +329,7 @@ abstract class NodeTest extends \Test\TestCase {
 		$this->assertEquals(50, $node->getMTime());
 	}
 
-	public function testGetStorage() {
+	public function testGetStorage(): void {
 		$this->root->expects($this->any())
 			->method('getUser')
 			->willReturn($this->user);
@@ -313,17 +340,11 @@ abstract class NodeTest extends \Test\TestCase {
 			->disableOriginalConstructor()
 			->getMock();
 
-		$this->view->expects($this->once())
-			->method('resolvePath')
-			->with('/bar/foo')
-			->willReturn([$storage, 'foo']);
-
-
-		$node = $this->createTestNode($this->root, $this->view, '/bar/foo');
+		$node = $this->createTestNode($this->root, $this->view, '/bar/foo', [], 'foo', $storage);
 		$this->assertEquals($storage, $node->getStorage());
 	}
 
-	public function testGetPath() {
+	public function testGetPath(): void {
 		$this->root->expects($this->any())
 			->method('getUser')
 			->willReturn($this->user);
@@ -332,7 +353,7 @@ abstract class NodeTest extends \Test\TestCase {
 		$this->assertEquals('/bar/foo', $node->getPath());
 	}
 
-	public function testGetInternalPath() {
+	public function testGetInternalPath(): void {
 		$this->root->expects($this->any())
 			->method('getUser')
 			->willReturn($this->user);
@@ -344,16 +365,16 @@ abstract class NodeTest extends \Test\TestCase {
 			->getMock();
 
 		$this->view->expects($this->once())
-			->method('resolvePath')
+			->method('getFileInfo')
 			->with('/bar/foo')
-			->willReturn([$storage, 'foo']);
+			->willReturn($this->getFileInfo([], 'foo'));
 
 
 		$node = $this->createTestNode($this->root, $this->view, '/bar/foo');
 		$this->assertEquals('foo', $node->getInternalPath());
 	}
 
-	public function testGetName() {
+	public function testGetName(): void {
 		$this->root->expects($this->any())
 			->method('getUser')
 			->willReturn($this->user);
@@ -362,7 +383,7 @@ abstract class NodeTest extends \Test\TestCase {
 		$this->assertEquals('foo', $node->getName());
 	}
 
-	public function testTouchSetMTime() {
+	public function testTouchSetMTime(): void {
 		$this->root->expects($this->any())
 			->method('getUser')
 			->willReturn($this->user);
@@ -382,7 +403,7 @@ abstract class NodeTest extends \Test\TestCase {
 		$this->assertEquals(100, $node->getMTime());
 	}
 
-	public function testTouchHooks() {
+	public function testTouchHooks(): void {
 		$test = $this;
 		$hooksRun = 0;
 		/**
@@ -409,7 +430,9 @@ abstract class NodeTest extends \Test\TestCase {
 			$this->user,
 			$this->userMountCache,
 			$this->logger,
-			$this->userManager
+			$this->userManager,
+			$this->eventDispatcher,
+			$this->cacheFactory,
 		);
 		$root->listen('\OC\Files', 'preTouch', $preListener);
 		$root->listen('\OC\Files', 'postTouch', $postListener);
@@ -420,14 +443,9 @@ abstract class NodeTest extends \Test\TestCase {
 			->willReturn(true);
 
 		$this->view->expects($this->any())
-			->method('resolvePath')
-			->with('/bar/foo')
-			->willReturn([null, 'foo']);
-
-		$this->view->expects($this->any())
 			->method('getFileInfo')
 			->with('/bar/foo')
-			->willReturn($this->getFileInfo(['permissions' => \OCP\Constants::PERMISSION_ALL]));
+			->willReturn($this->getFileInfo(['permissions' => \OCP\Constants::PERMISSION_ALL], 'foo'));
 
 		$node = $this->createTestNode($root, $this->view, '/bar/foo');
 		$node->touch(100);
@@ -435,7 +453,7 @@ abstract class NodeTest extends \Test\TestCase {
 	}
 
 
-	public function testTouchNotPermitted() {
+	public function testTouchNotPermitted(): void {
 		$this->expectException(\OCP\Files\NotPermittedException::class);
 
 		$this->root->expects($this->any())
@@ -452,14 +470,14 @@ abstract class NodeTest extends \Test\TestCase {
 	}
 
 
-	public function testInvalidPath() {
+	public function testInvalidPath(): void {
 		$this->expectException(\OCP\Files\InvalidPathException::class);
 
 		$node = $this->createTestNode($this->root, $this->view, '/../foo');
 		$node->getFileInfo();
 	}
 
-	public function testCopySameStorage() {
+	public function testCopySameStorage(): void {
 		$this->view->expects($this->any())
 			->method('copy')
 			->with('/bar/foo', '/bar/asd')
@@ -473,8 +491,7 @@ abstract class NodeTest extends \Test\TestCase {
 		$parentNode = new \OC\Files\Node\Folder($this->root, $this->view, '/bar');
 		$newNode = $this->createTestNode($this->root, $this->view, '/bar/asd');
 
-		$this->root->expects($this->exactly(2))
-			->method('get')
+		$this->root->method('get')
 			->willReturnMap([
 				['/bar/asd', $newNode],
 				['/bar', $parentNode]
@@ -486,7 +503,7 @@ abstract class NodeTest extends \Test\TestCase {
 	}
 
 
-	public function testCopyNotPermitted() {
+	public function testCopyNotPermitted(): void {
 		$this->expectException(\OCP\Files\NotPermittedException::class);
 
 		/**
@@ -517,7 +534,7 @@ abstract class NodeTest extends \Test\TestCase {
 	}
 
 
-	public function testCopyNoParent() {
+	public function testCopyNoParent(): void {
 		$this->expectException(\OCP\Files\NotFoundException::class);
 
 		$this->view->expects($this->never())
@@ -534,7 +551,7 @@ abstract class NodeTest extends \Test\TestCase {
 	}
 
 
-	public function testCopyParentIsFile() {
+	public function testCopyParentIsFile(): void {
 		$this->expectException(\OCP\Files\NotPermittedException::class);
 
 		$this->view->expects($this->never())
@@ -552,7 +569,7 @@ abstract class NodeTest extends \Test\TestCase {
 		$node->copy('/bar/asd');
 	}
 
-	public function testMoveSameStorage() {
+	public function testMoveSameStorage(): void {
 		$this->view->expects($this->any())
 			->method('rename')
 			->with('/bar/foo', '/bar/asd')
@@ -589,10 +606,10 @@ abstract class NodeTest extends \Test\TestCase {
 	 * @param string $preHookName
 	 * @param string $postHookName
 	 */
-	public function testMoveCopyHooks($operationMethod, $viewMethod, $preHookName, $postHookName) {
+	public function testMoveCopyHooks($operationMethod, $viewMethod, $preHookName, $postHookName): void {
 		/** @var IRootFolder|\PHPUnit\Framework\MockObject\MockObject $root */
 		$root = $this->getMockBuilder('\OC\Files\Node\Root')
-			->setConstructorArgs([$this->manager, $this->view, $this->user, $this->userMountCache, $this->logger, $this->userManager])
+			->setConstructorArgs([$this->manager, $this->view, $this->user, $this->userMountCache, $this->logger, $this->userManager, $this->eventDispatcher, $this->cacheFactory])
 			->setMethods(['get'])
 			->getMock();
 
@@ -657,7 +674,7 @@ abstract class NodeTest extends \Test\TestCase {
 	}
 
 
-	public function testMoveNotPermitted() {
+	public function testMoveNotPermitted(): void {
 		$this->expectException(\OCP\Files\NotPermittedException::class);
 
 		$this->view->expects($this->any())
@@ -679,7 +696,7 @@ abstract class NodeTest extends \Test\TestCase {
 	}
 
 
-	public function testMoveNoParent() {
+	public function testMoveNoParent(): void {
 		$this->expectException(\OCP\Files\NotFoundException::class);
 
 		/**
@@ -701,7 +718,7 @@ abstract class NodeTest extends \Test\TestCase {
 	}
 
 
-	public function testMoveParentIsFile() {
+	public function testMoveParentIsFile(): void {
 		$this->expectException(\OCP\Files\NotPermittedException::class);
 
 		$this->view->expects($this->never())
@@ -719,7 +736,7 @@ abstract class NodeTest extends \Test\TestCase {
 	}
 
 
-	public function testMoveFailed() {
+	public function testMoveFailed(): void {
 		$this->expectException(\OCP\Files\NotPermittedException::class);
 
 		$this->view->expects($this->any())
@@ -742,7 +759,7 @@ abstract class NodeTest extends \Test\TestCase {
 	}
 
 
-	public function testCopyFailed() {
+	public function testCopyFailed(): void {
 		$this->expectException(\OCP\Files\NotPermittedException::class);
 
 		$this->view->expects($this->any())

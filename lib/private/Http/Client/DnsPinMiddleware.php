@@ -3,42 +3,26 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2021, Lukas Reschke <lukas@statuscode.ch>
- *
- * @author Lukas Reschke <lukas@statuscode.ch>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2021 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 namespace OC\Http\Client;
 
+use OC\Net\IpAddressClassifier;
+use OCP\Http\Client\LocalServerException;
 use Psr\Http\Message\RequestInterface;
 
 class DnsPinMiddleware {
 	/** @var NegativeDnsCache */
 	private $negativeDnsCache;
-	/** @var LocalAddressChecker */
-	private $localAddressChecker;
+	private IpAddressClassifier $ipAddressClassifier;
 
 	public function __construct(
 		NegativeDnsCache $negativeDnsCache,
-		LocalAddressChecker $localAddressChecker
+		IpAddressClassifier $ipAddressClassifier,
 	) {
 		$this->negativeDnsCache = $negativeDnsCache;
-		$this->localAddressChecker = $localAddressChecker;
+		$this->ipAddressClassifier = $ipAddressClassifier;
 	}
 
 	/**
@@ -54,7 +38,7 @@ class DnsPinMiddleware {
 		$second = array_pop($labels);
 
 		$hostname = $second . '.' . $top;
-		$responses = dns_get_record($hostname, DNS_SOA);
+		$responses = $this->dnsGetRecord($hostname, DNS_SOA);
 
 		if ($responses === false || count($responses) === 0) {
 			return null;
@@ -73,15 +57,21 @@ class DnsPinMiddleware {
 
 		$soaDnsEntry = $this->soaRecord($target);
 		$dnsNegativeTtl = $soaDnsEntry['minimum-ttl'] ?? null;
+		$canHaveCnameRecord = true;
 
-		$dnsTypes = [DNS_A, DNS_AAAA, DNS_CNAME];
+		$dnsTypes = \defined('AF_INET6') || @inet_pton('::1')
+			? [DNS_A, DNS_AAAA, DNS_CNAME]
+			: [DNS_A, DNS_CNAME];
 		foreach ($dnsTypes as $dnsType) {
+			if ($canHaveCnameRecord === false && $dnsType === DNS_CNAME) {
+				continue;
+			}
+
 			if ($this->negativeDnsCache->isNegativeCached($target, $dnsType)) {
 				continue;
 			}
 
-			$dnsResponses = dns_get_record($target, $dnsType);
-			$canHaveCnameRecord = true;
+			$dnsResponses = $this->dnsGetRecord($target, $dnsType);
 			if ($dnsResponses !== false && count($dnsResponses) > 0) {
 				foreach ($dnsResponses as $dnsResponse) {
 					if (isset($dnsResponse['ip'])) {
@@ -92,7 +82,6 @@ class DnsPinMiddleware {
 						$canHaveCnameRecord = false;
 					} elseif (isset($dnsResponse['target']) && $canHaveCnameRecord) {
 						$targetIps = array_merge($targetIps, $this->dnsResolve($dnsResponse['target'], $recursionCount));
-						$canHaveCnameRecord = true;
 					}
 				}
 			} elseif ($dnsNegativeTtl !== null) {
@@ -103,11 +92,18 @@ class DnsPinMiddleware {
 		return $targetIps;
 	}
 
+	/**
+	 * Wrapper for dns_get_record
+	 */
+	protected function dnsGetRecord(string $hostname, int $type): array|false {
+		return \dns_get_record($hostname, $type);
+	}
+
 	public function addDnsPinning() {
 		return function (callable $handler) {
 			return function (
 				RequestInterface $request,
-				array $options
+				array $options,
 			) use ($handler) {
 				if ($options['nextcloud']['allow_local_address'] === true) {
 					return $handler($request, $options);
@@ -125,7 +121,11 @@ class DnsPinMiddleware {
 					$ports[] = (string)$port;
 				}
 
-				$targetIps = $this->dnsResolve($hostName, 0);
+				$targetIps = $this->dnsResolve(idn_to_utf8($hostName), 0);
+
+				if (empty($targetIps)) {
+					throw new LocalServerException('No DNS record found for ' . $hostName);
+				}
 
 				$curlResolves = [];
 
@@ -133,7 +133,10 @@ class DnsPinMiddleware {
 					$curlResolves["$hostName:$port"] = [];
 
 					foreach ($targetIps as $ip) {
-						$this->localAddressChecker->ThrowIfLocalIp($ip);
+						if ($this->ipAddressClassifier->isLocalAddress($ip)) {
+							// TODO: continue with all non-local IPs?
+							throw new LocalServerException('Host "' . $ip . '" (' . $hostName . ':' . $port . ') violates local access rules');
+						}
 						$curlResolves["$hostName:$port"][] = $ip;
 					}
 				}

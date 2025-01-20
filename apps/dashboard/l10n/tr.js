@@ -3,11 +3,11 @@ OC.L10N.register(
     {
     "Dashboard" : "Pano",
     "Dashboard app" : "Pano uygulaması",
-    "Show something" : "Bir şeyler görüntüle",
+    "Start your day informed\n\nThe Nextcloud Dashboard is your starting point of the day, giving you an overview of your upcoming appointments, urgent emails, chat messages, incoming tickets, latest tweets and much more! People can add the widgets they like and change the background to their liking." : "Güne bilgilenerek başlayın\n\nNextcloud Pano, gününüzün başlangıç noktasıdır ve size yaklaşan randevularınız, acil e-postalarınız, sohbet iletileri, gelen destek istekleri, son tweetler gibi pek çok bilgi verir! Kişiler istedikleri başka pano bileşenlerini ekleyebilir ve arka planı değiştirebilir.",
+    "\"{title} icon\"" : "\"{title} simgesi\"",
     "Customize" : "Özelleştir",
     "Edit widgets" : "Pano bileşenlerini düzenle",
     "Get more widgets from the App Store" : "Uygulama mağazasından başka pano bileşenleri alın",
-    "Change background image" : "Arka plan görselini değiştir",
     "Weather service" : "Hava durumu",
     "For your privacy, the weather data is requested by your Nextcloud server on your behalf so the weather service receives no personal information." : "Kişisel gizliliğinizi korumak için Nextcloud sunucunuz hava durumu verilerini sizin adınıza ister. Böylece hava durumu hizmetine hiçbir kişisel bilgi aktarılmaz.",
     "Weather data from Met.no" : "Hava durumu verileri Met.no tarafından sağlanıyor",
@@ -23,13 +23,8 @@ OC.L10N.register(
     "Good evening, {name}" : "İyi geceler, {name}",
     "Hello" : "Merhaba",
     "Hello, {name}" : "Merhaba {name}",
-    "Pick from Files" : "Dosyalardan seçin",
-    "Default images" : "Varsayılan görseller",
-    "Plain background" : "Düz arka plan",
-    "Insert from {productName}" : "{productName} üzerinden ekle",
-    "Get more widgets from the app store" : "Uygulama mağazasından başka pano bileşenleri alın",
-    "Good night, {name}" : "İyi geceler, {name}",
-    "Good night" : "İyi geceler",
-    "Pick from files" : "Dosyalardan seçin"
+    "Happy birthday 🥳🤩🎂🎉" : "Mutlu yıllar 🥳🤩🎂🎉",
+    "Happy birthday, {name} 🥳🤩🎂🎉" : "Mutlu yıllar, {name} 🥳🤩🎂🎉",
+    "Start your day informed\n\nThe Nextcloud Dashboard is your starting point of the day, giving you an overview of your upcoming appointments, urgent emails, chat messages, incoming tickets, latest tweets and much more! Users can add the widgets they like and change the background to their liking." : "Güne bilgilenerek başlayın\n\nNextcloud Pano, gününüzün başlangıç noktasıdır ve size yaklaşan randevularınız, acil e-postalarınız, sohbet iletileri, gelen destek istekleri, son tweetler gibi pek çok bilgi verir! Kullanıcılar istedikleri başka pano bileşenlerini ekleyebilir ve arka planı değiştirebilir."
 },
 "nplurals=2; plural=(n > 1);");

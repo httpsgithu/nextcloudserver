@@ -1,28 +1,9 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Vincent Petry <vincent@nextcloud.com>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 namespace OCA\DAV\Tests\unit\Comments;
 
@@ -30,15 +11,15 @@ use OCA\DAV\Comments\CommentNode;
 use OCP\Comments\IComment;
 use OCP\Comments\ICommentsManager;
 use OCP\Comments\MessageTooLongException;
-use OCP\ILogger;
 use OCP\IUser;
 use OCP\IUserManager;
 use OCP\IUserSession;
+use Psr\Log\LoggerInterface;
 use Sabre\DAV\PropPatch;
 
 class CommentsNodeTest extends \Test\TestCase {
 
-	/** @var  ICommentsManager|\PHPUnit\Framework\MockObject\MockObject */
+	/** @var ICommentsManager|\PHPUnit\Framework\MockObject\MockObject */
 	protected $commentsManager;
 
 	protected $comment;
@@ -62,7 +43,7 @@ class CommentsNodeTest extends \Test\TestCase {
 		$this->userSession = $this->getMockBuilder(IUserSession::class)
 			->disableOriginalConstructor()
 			->getMock();
-		$this->logger = $this->getMockBuilder(ILogger::class)
+		$this->logger = $this->getMockBuilder(LoggerInterface::class)
 			->disableOriginalConstructor()
 			->getMock();
 
@@ -75,7 +56,7 @@ class CommentsNodeTest extends \Test\TestCase {
 		);
 	}
 
-	public function testDelete() {
+	public function testDelete(): void {
 		$user = $this->getMockBuilder(IUser::class)
 			->disableOriginalConstructor()
 			->getMock();
@@ -108,7 +89,7 @@ class CommentsNodeTest extends \Test\TestCase {
 	}
 
 
-	public function testDeleteForbidden() {
+	public function testDeleteForbidden(): void {
 		$this->expectException(\Sabre\DAV\Exception\Forbidden::class);
 
 		$user = $this->getMockBuilder(IUser::class)
@@ -140,7 +121,7 @@ class CommentsNodeTest extends \Test\TestCase {
 		$this->node->delete();
 	}
 
-	public function testGetName() {
+	public function testGetName(): void {
 		$id = '19';
 		$this->comment->expects($this->once())
 			->method('getId')
@@ -150,17 +131,17 @@ class CommentsNodeTest extends \Test\TestCase {
 	}
 
 
-	public function testSetName() {
+	public function testSetName(): void {
 		$this->expectException(\Sabre\DAV\Exception\MethodNotAllowed::class);
 
 		$this->node->setName('666');
 	}
 
-	public function testGetLastModified() {
+	public function testGetLastModified(): void {
 		$this->assertSame($this->node->getLastModified(), null);
 	}
 
-	public function testUpdateComment() {
+	public function testUpdateComment(): void {
 		$msg = 'Hello Earth';
 
 		$user = $this->getMockBuilder(IUser::class)
@@ -195,7 +176,7 @@ class CommentsNodeTest extends \Test\TestCase {
 	}
 
 
-	public function testUpdateCommentLogException() {
+	public function testUpdateCommentLogException(): void {
 		$this->expectException(\Exception::class);
 		$this->expectExceptionMessage('buh!');
 
@@ -230,13 +211,13 @@ class CommentsNodeTest extends \Test\TestCase {
 			->method('save');
 
 		$this->logger->expects($this->once())
-			->method('logException');
+			->method('error');
 
 		$this->node->updateComment($msg);
 	}
 
 
-	public function testUpdateCommentMessageTooLongException() {
+	public function testUpdateCommentMessageTooLongException(): void {
 		$this->expectException(\Sabre\DAV\Exception\BadRequest::class);
 		$this->expectExceptionMessage('Message exceeds allowed character limit of');
 
@@ -268,14 +249,14 @@ class CommentsNodeTest extends \Test\TestCase {
 			->method('save');
 
 		$this->logger->expects($this->once())
-			->method('logException');
+			->method('error');
 
 		// imagine 'foo' has >1k characters. comment is mocked anyway.
 		$this->node->updateComment('foo');
 	}
 
 
-	public function testUpdateForbiddenByUser() {
+	public function testUpdateForbiddenByUser(): void {
 		$this->expectException(\Sabre\DAV\Exception\Forbidden::class);
 
 		$msg = 'HaXX0r';
@@ -310,7 +291,7 @@ class CommentsNodeTest extends \Test\TestCase {
 	}
 
 
-	public function testUpdateForbiddenByType() {
+	public function testUpdateForbiddenByType(): void {
 		$this->expectException(\Sabre\DAV\Exception\Forbidden::class);
 
 		$msg = 'HaXX0r';
@@ -340,7 +321,7 @@ class CommentsNodeTest extends \Test\TestCase {
 	}
 
 
-	public function testUpdateForbiddenByNotLoggedIn() {
+	public function testUpdateForbiddenByNotLoggedIn(): void {
 		$this->expectException(\Sabre\DAV\Exception\Forbidden::class);
 
 		$msg = 'HaXX0r';
@@ -362,7 +343,7 @@ class CommentsNodeTest extends \Test\TestCase {
 		$this->node->updateComment($msg);
 	}
 
-	public function testPropPatch() {
+	public function testPropPatch(): void {
 		$propPatch = $this->getMockBuilder(PropPatch::class)
 			->disableOriginalConstructor()
 			->getMock();
@@ -374,7 +355,7 @@ class CommentsNodeTest extends \Test\TestCase {
 		$this->node->propPatch($propPatch);
 	}
 
-	public function testGetProperties() {
+	public function testGetProperties(): void {
 		$ns = '{http://owncloud.org/ns}';
 		$expected = [
 			$ns . 'id' => '123',
@@ -404,6 +385,13 @@ class CommentsNodeTest extends \Test\TestCase {
 			$ns . 'objectId' => '1848',
 			$ns . 'referenceId' => 'ref',
 			$ns . 'isUnread' => null,
+			$ns . 'reactions' => [],
+			$ns . 'metaData' => [
+				'last_edited_at' => 1702553770,
+				'last_edited_by_id' => 'charly',
+				'last_edited_by_type' => 'user',
+			],
+			$ns . 'expireDate' => new \DateTime('2016-01-12 19:00:00'),
 		];
 
 		$this->commentsManager->expects($this->exactly(2))
@@ -473,6 +461,14 @@ class CommentsNodeTest extends \Test\TestCase {
 			->method('getReferenceId')
 			->willReturn($expected[$ns . 'referenceId']);
 
+		$this->comment->expects($this->once())
+			->method('getMetaData')
+			->willReturn($expected[$ns . 'metaData']);
+
+		$this->comment->expects($this->once())
+			->method('getExpireDate')
+			->willReturn($expected[$ns . 'expireDate']);
+
 		$user = $this->getMockBuilder(IUser::class)
 			->disableOriginalConstructor()
 			->getMock();
@@ -488,7 +484,7 @@ class CommentsNodeTest extends \Test\TestCase {
 		$properties = $this->node->getProperties(null);
 
 		foreach ($properties as $name => $value) {
-			$this->assertArrayHasKey($name, $expected);
+			$this->assertArrayHasKey($name, $expected, 'Key not found in the list of $expected');
 			$this->assertSame($expected[$name], $value);
 			unset($expected[$name]);
 		}
@@ -513,7 +509,7 @@ class CommentsNodeTest extends \Test\TestCase {
 	 * @dataProvider readCommentProvider
 	 * @param $expected
 	 */
-	public function testGetPropertiesUnreadProperty($creationDT, $readDT, $expected) {
+	public function testGetPropertiesUnreadProperty($creationDT, $readDT, $expected): void {
 		$this->comment->expects($this->any())
 			->method('getCreationDateTime')
 			->willReturn($creationDT);

@@ -1,33 +1,8 @@
 <?php
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- * @copyright Copyright (c) 2016 Joas Schilling <coding@schilljs.com>
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Julius Härtl <jus@bitgrid.net>
- * @author Lukas Reschke <lukas@statuscode.ch>
- * @author Mario Danic <mario@lovelyhq.com>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Robin Appelman <robin@icewind.nl>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Thomas Citharel <nextcloud@tcit.fr>
- * @author Victor Dubiniuk <dubiniuk@owncloud.com>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 namespace OC\Core;
 
@@ -41,19 +16,19 @@ use OC\Authentication\Listeners\UserDeletedStoreCleanupListener;
 use OC\Authentication\Listeners\UserDeletedTokenCleanupListener;
 use OC\Authentication\Listeners\UserDeletedWebAuthnCleanupListener;
 use OC\Authentication\Notifications\Notifier as AuthenticationNotifier;
+use OC\Core\Listener\BeforeTemplateRenderedListener;
 use OC\Core\Notification\CoreNotifier;
-use OC\DB\Connection;
-use OC\DB\MissingColumnInformation;
-use OC\DB\MissingIndexInformation;
-use OC\DB\MissingPrimaryKeyInformation;
-use OC\DB\SchemaWrapper;
+use OC\TagManager;
 use OCP\AppFramework\App;
+use OCP\AppFramework\Http\Events\BeforeLoginTemplateRenderedEvent;
+use OCP\AppFramework\Http\Events\BeforeTemplateRenderedEvent;
+use OCP\DB\Events\AddMissingIndicesEvent;
+use OCP\DB\Events\AddMissingPrimaryKeyEvent;
 use OCP\EventDispatcher\IEventDispatcher;
-use OCP\IDBConnection;
+use OCP\Notification\IManager as INotificationManager;
 use OCP\User\Events\BeforeUserDeletedEvent;
 use OCP\User\Events\UserDeletedEvent;
 use OCP\Util;
-use Symfony\Component\EventDispatcher\GenericEvent;
 
 /**
  * Class Application
@@ -72,198 +47,248 @@ class Application extends App {
 
 		$server = $container->getServer();
 		/** @var IEventDispatcher $eventDispatcher */
-		$eventDispatcher = $server->query(IEventDispatcher::class);
+		$eventDispatcher = $server->get(IEventDispatcher::class);
 
-		$notificationManager = $server->getNotificationManager();
+		$notificationManager = $server->get(INotificationManager::class);
 		$notificationManager->registerNotifierService(CoreNotifier::class);
 		$notificationManager->registerNotifierService(AuthenticationNotifier::class);
 
-		$oldEventDispatcher = $server->getEventDispatcher();
+		$eventDispatcher->addListener(AddMissingIndicesEvent::class, function (AddMissingIndicesEvent $event) {
+			$event->addMissingIndex(
+				'share',
+				'share_with_index',
+				['share_with']
+			);
+			$event->addMissingIndex(
+				'share',
+				'parent_index',
+				['parent']
+			);
+			$event->addMissingIndex(
+				'share',
+				'owner_index',
+				['uid_owner']
+			);
+			$event->addMissingIndex(
+				'share',
+				'initiator_index',
+				['uid_initiator']
+			);
 
-		$oldEventDispatcher->addListener(IDBConnection::CHECK_MISSING_INDEXES_EVENT,
-			function (GenericEvent $event) use ($container) {
-				/** @var MissingIndexInformation $subject */
-				$subject = $event->getSubject();
+			$event->addMissingIndex(
+				'filecache',
+				'fs_mtime',
+				['mtime']
+			);
+			$event->addMissingIndex(
+				'filecache',
+				'fs_size',
+				['size']
+			);
+			$event->addMissingIndex(
+				'filecache',
+				'fs_id_storage_size',
+				['fileid', 'storage', 'size']
+			);
+			$event->addMissingIndex(
+				'filecache',
+				'fs_storage_path_prefix',
+				['storage', 'path'],
+				['lengths' => [null, 64]]
+			);
+			$event->addMissingIndex(
+				'filecache',
+				'fs_parent',
+				['parent']
+			);
+			$event->addMissingIndex(
+				'filecache',
+				'fs_name_hash',
+				['name']
+			);
 
-				$schema = new SchemaWrapper($container->query(Connection::class));
+			$event->addMissingIndex(
+				'twofactor_providers',
+				'twofactor_providers_uid',
+				['uid']
+			);
 
-				if ($schema->hasTable('share')) {
-					$table = $schema->getTable('share');
+			$event->addMissingUniqueIndex(
+				'login_flow_v2',
+				'poll_token',
+				['poll_token'],
+				[],
+				true
+			);
+			$event->addMissingUniqueIndex(
+				'login_flow_v2',
+				'login_token',
+				['login_token'],
+				[],
+				true
+			);
+			$event->addMissingIndex(
+				'login_flow_v2',
+				'timestamp',
+				['timestamp'],
+				[],
+				true
+			);
 
-					if (!$table->hasIndex('share_with_index')) {
-						$subject->addHintForMissingSubject($table->getName(), 'share_with_index');
-					}
-					if (!$table->hasIndex('parent_index')) {
-						$subject->addHintForMissingSubject($table->getName(), 'parent_index');
-					}
-					if (!$table->hasIndex('owner_index')) {
-						$subject->addHintForMissingSubject($table->getName(), 'owner_index');
-					}
-					if (!$table->hasIndex('initiator_index')) {
-						$subject->addHintForMissingSubject($table->getName(), 'initiator_index');
-					}
-				}
+			$event->addMissingIndex(
+				'whats_new',
+				'version',
+				['version'],
+				[],
+				true
+			);
 
-				if ($schema->hasTable('filecache')) {
-					$table = $schema->getTable('filecache');
+			$event->addMissingIndex(
+				'cards',
+				'cards_abiduri',
+				['addressbookid', 'uri'],
+				[],
+				true
+			);
 
-					if (!$table->hasIndex('fs_mtime')) {
-						$subject->addHintForMissingSubject($table->getName(), 'fs_mtime');
-					}
+			$event->addMissingIndex(
+				'cards_properties',
+				'cards_prop_abid',
+				['addressbookid'],
+				[],
+				true
+			);
 
-					if (!$table->hasIndex('fs_size')) {
-						$subject->addHintForMissingSubject($table->getName(), 'fs_size');
-					}
-				}
+			$event->addMissingIndex(
+				'calendarobjects_props',
+				'calendarobject_calid_index',
+				['calendarid', 'calendartype']
+			);
 
-				if ($schema->hasTable('twofactor_providers')) {
-					$table = $schema->getTable('twofactor_providers');
+			$event->addMissingIndex(
+				'schedulingobjects',
+				'schedulobj_principuri_index',
+				['principaluri']
+			);
 
-					if (!$table->hasIndex('twofactor_providers_uid')) {
-						$subject->addHintForMissingSubject($table->getName(), 'twofactor_providers_uid');
-					}
-				}
+			$event->addMissingIndex(
+				'schedulingobjects',
+				'schedulobj_lastmodified_idx',
+				['lastmodified']
+			);
 
-				if ($schema->hasTable('login_flow_v2')) {
-					$table = $schema->getTable('login_flow_v2');
+			$event->addMissingIndex(
+				'properties',
+				'properties_path_index',
+				['userid', 'propertypath']
+			);
+			$event->addMissingIndex(
+				'properties',
+				'properties_pathonly_index',
+				['propertypath']
+			);
 
-					if (!$table->hasIndex('poll_token')) {
-						$subject->addHintForMissingSubject($table->getName(), 'poll_token');
-					}
-					if (!$table->hasIndex('login_token')) {
-						$subject->addHintForMissingSubject($table->getName(), 'login_token');
-					}
-					if (!$table->hasIndex('timestamp')) {
-						$subject->addHintForMissingSubject($table->getName(), 'timestamp');
-					}
-				}
 
-				if ($schema->hasTable('whats_new')) {
-					$table = $schema->getTable('whats_new');
+			$event->addMissingIndex(
+				'jobs',
+				'job_lastcheck_reserved',
+				['last_checked', 'reserved_at']
+			);
 
-					if (!$table->hasIndex('version')) {
-						$subject->addHintForMissingSubject($table->getName(), 'version');
-					}
-				}
+			$event->addMissingIndex(
+				'direct_edit',
+				'direct_edit_timestamp',
+				['timestamp']
+			);
 
-				if ($schema->hasTable('cards')) {
-					$table = $schema->getTable('cards');
+			$event->addMissingIndex(
+				'preferences',
+				'prefs_uid_lazy_i',
+				['userid', 'lazy']
+			);
+			$event->addMissingIndex(
+				'preferences',
+				'prefs_app_key_ind_fl_i',
+				['appid', 'configkey', 'indexed', 'flags']
+			);
 
-					if (!$table->hasIndex('cards_abid')) {
-						$subject->addHintForMissingSubject($table->getName(), 'cards_abid');
-					}
+			$event->addMissingIndex(
+				'mounts',
+				'mounts_class_index',
+				['mount_provider_class']
+			);
+			$event->addMissingIndex(
+				'mounts',
+				'mounts_user_root_path_index',
+				['user_id', 'root_id', 'mount_point'],
+				['lengths' => [null, null, 128]]
+			);
 
-					if (!$table->hasIndex('cards_abiduri')) {
-						$subject->addHintForMissingSubject($table->getName(), 'cards_abiduri');
-					}
-				}
+			$event->addMissingIndex(
+				'systemtag_object_mapping',
+				'systag_by_tagid',
+				['systemtagid', 'objecttype']
+			);
 
-				if ($schema->hasTable('cards_properties')) {
-					$table = $schema->getTable('cards_properties');
+			$event->addMissingIndex(
+				'systemtag_object_mapping',
+				'systag_by_objectid',
+				['objectid']
+			);
 
-					if (!$table->hasIndex('cards_prop_abid')) {
-						$subject->addHintForMissingSubject($table->getName(), 'cards_prop_abid');
-					}
-				}
+			$event->addMissingIndex(
+				'systemtag_object_mapping',
+				'systag_objecttype',
+				['objecttype']
+			);
+		});
 
-				if ($schema->hasTable('calendarobjects_props')) {
-					$table = $schema->getTable('calendarobjects_props');
+		$eventDispatcher->addListener(AddMissingPrimaryKeyEvent::class, function (AddMissingPrimaryKeyEvent $event) {
+			$event->addMissingPrimaryKey(
+				'federated_reshares',
+				'federated_res_pk',
+				['share_id'],
+				'share_id_index'
+			);
 
-					if (!$table->hasIndex('calendarobject_calid_index')) {
-						$subject->addHintForMissingSubject($table->getName(), 'calendarobject_calid_index');
-					}
-				}
+			$event->addMissingPrimaryKey(
+				'systemtag_object_mapping',
+				'som_pk',
+				['objecttype', 'objectid', 'systemtagid'],
+				'mapping'
+			);
 
-				if ($schema->hasTable('schedulingobjects')) {
-					$table = $schema->getTable('schedulingobjects');
-					if (!$table->hasIndex('schedulobj_principuri_index')) {
-						$subject->addHintForMissingSubject($table->getName(), 'schedulobj_principuri_index');
-					}
-				}
+			$event->addMissingPrimaryKey(
+				'comments_read_markers',
+				'crm_pk',
+				['user_id', 'object_type', 'object_id'],
+				'comments_marker_index'
+			);
 
-				if ($schema->hasTable('properties')) {
-					$table = $schema->getTable('properties');
-					if (!$table->hasIndex('properties_path_index')) {
-						$subject->addHintForMissingSubject($table->getName(), 'properties_path_index');
-					}
-				}
-			}
-		);
+			$event->addMissingPrimaryKey(
+				'collres_resources',
+				'crr_pk',
+				['collection_id', 'resource_type', 'resource_id'],
+				'collres_unique_res'
+			);
 
-		$oldEventDispatcher->addListener(IDBConnection::CHECK_MISSING_PRIMARY_KEYS_EVENT,
-			function (GenericEvent $event) use ($container) {
-				/** @var MissingPrimaryKeyInformation $subject */
-				$subject = $event->getSubject();
+			$event->addMissingPrimaryKey(
+				'collres_accesscache',
+				'cra_pk',
+				['user_id', 'collection_id', 'resource_type', 'resource_id'],
+				'collres_unique_user'
+			);
 
-				$schema = new SchemaWrapper($container->query(Connection::class));
+			$event->addMissingPrimaryKey(
+				'filecache_extended',
+				'fce_pk',
+				['fileid'],
+				'fce_fileid_idx'
+			);
+		});
 
-				if ($schema->hasTable('federated_reshares')) {
-					$table = $schema->getTable('federated_reshares');
-
-					if (!$table->hasPrimaryKey()) {
-						$subject->addHintForMissingSubject($table->getName());
-					}
-				}
-
-				if ($schema->hasTable('systemtag_object_mapping')) {
-					$table = $schema->getTable('systemtag_object_mapping');
-
-					if (!$table->hasPrimaryKey()) {
-						$subject->addHintForMissingSubject($table->getName());
-					}
-				}
-
-				if ($schema->hasTable('comments_read_markers')) {
-					$table = $schema->getTable('comments_read_markers');
-
-					if (!$table->hasPrimaryKey()) {
-						$subject->addHintForMissingSubject($table->getName());
-					}
-				}
-
-				if ($schema->hasTable('collres_resources')) {
-					$table = $schema->getTable('collres_resources');
-
-					if (!$table->hasPrimaryKey()) {
-						$subject->addHintForMissingSubject($table->getName());
-					}
-				}
-
-				if ($schema->hasTable('collres_accesscache')) {
-					$table = $schema->getTable('collres_accesscache');
-
-					if (!$table->hasPrimaryKey()) {
-						$subject->addHintForMissingSubject($table->getName());
-					}
-				}
-
-				if ($schema->hasTable('filecache_extended')) {
-					$table = $schema->getTable('filecache_extended');
-
-					if (!$table->hasPrimaryKey()) {
-						$subject->addHintForMissingSubject($table->getName());
-					}
-				}
-			}
-		);
-
-		$oldEventDispatcher->addListener(IDBConnection::CHECK_MISSING_COLUMNS_EVENT,
-			function (GenericEvent $event) use ($container) {
-				/** @var MissingColumnInformation $subject */
-				$subject = $event->getSubject();
-
-				$schema = new SchemaWrapper($container->query(Connection::class));
-
-				if ($schema->hasTable('comments')) {
-					$table = $schema->getTable('comments');
-
-					if (!$table->hasColumn('reference_id')) {
-						$subject->addHintForMissingColumn($table->getName(), 'reference_id');
-					}
-				}
-			}
-		);
-
+		$eventDispatcher->addServiceListener(BeforeTemplateRenderedEvent::class, BeforeTemplateRenderedListener::class);
+		$eventDispatcher->addServiceListener(BeforeLoginTemplateRenderedEvent::class, BeforeTemplateRenderedListener::class);
 		$eventDispatcher->addServiceListener(RemoteWipeStarted::class, RemoteWipeActivityListener::class);
 		$eventDispatcher->addServiceListener(RemoteWipeStarted::class, RemoteWipeNotificationsListener::class);
 		$eventDispatcher->addServiceListener(RemoteWipeStarted::class, RemoteWipeEmailListener::class);
@@ -275,5 +300,8 @@ class Application extends App {
 		$eventDispatcher->addServiceListener(BeforeUserDeletedEvent::class, UserDeletedFilesCleanupListener::class);
 		$eventDispatcher->addServiceListener(UserDeletedEvent::class, UserDeletedFilesCleanupListener::class);
 		$eventDispatcher->addServiceListener(UserDeletedEvent::class, UserDeletedWebAuthnCleanupListener::class);
+
+		// Tags
+		$eventDispatcher->addServiceListener(UserDeletedEvent::class, TagManager::class);
 	}
 }

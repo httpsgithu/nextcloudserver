@@ -1,7 +1,12 @@
 <?php
-
+/**
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
 namespace Test\Comments;
 
+use OC\Comments\Comment;
 use OCP\Comments\IComment;
 use OCP\Comments\ICommentsManager;
 use OCP\IUser;
@@ -21,7 +26,7 @@ class FakeManager implements ICommentsManager {
 		$objectId,
 		$limit = 0,
 		$offset = 0,
-		\DateTime $notOlderThan = null
+		?\DateTime $notOlderThan = null,
 	) {
 	}
 
@@ -31,12 +36,24 @@ class FakeManager implements ICommentsManager {
 		int $lastKnownCommentId,
 		string $sortDirection = 'asc',
 		int $limit = 30,
-		bool $includeLastKnown = false
+		bool $includeLastKnown = false,
 	): array {
 		return [];
 	}
 
-	public function getNumberOfCommentsForObject($objectType, $objectId, \DateTime $notOlderThan = null, $verb = '') {
+	public function getCommentsWithVerbForObjectSinceComment(
+		string $objectType,
+		string $objectId,
+		array $verbs,
+		int $lastKnownCommentId,
+		string $sortDirection = 'asc',
+		int $limit = 30,
+		bool $includeLastKnown = false,
+	): array {
+		return [];
+	}
+
+	public function getNumberOfCommentsForObject($objectType, $objectId, ?\DateTime $notOlderThan = null, $verb = '') {
 	}
 
 	public function search(string $search, string $objectType, string $objectId, string $verb, int $offset, int $limit = 50): array {
@@ -47,6 +64,22 @@ class FakeManager implements ICommentsManager {
 	}
 
 	public function delete($id) {
+	}
+
+	public function getReactionComment(int $parentId, string $actorType, string $actorId, string $reaction): IComment {
+		return new Comment();
+	}
+
+	public function retrieveAllReactions(int $parentId): array {
+		return [];
+	}
+
+	public function retrieveAllReactionsWithSpecificReaction(int $parentId, string $reaction): array {
+		return [];
+	}
+
+	public function supportReactions(): bool {
+		return false;
 	}
 
 	public function save(IComment $comment) {
@@ -101,11 +134,19 @@ class FakeManager implements ICommentsManager {
 		return 0;
 	}
 
+	public function getNumberOfCommentsWithVerbsForObjectSinceComment(string $objectType, string $objectId, int $lastRead, array $verbs): int {
+		return 0;
+	}
+
 	public function getLastCommentBeforeDate(string $objectType, string $objectId, \DateTime $beforeDate, string $verb = ''): int {
 		return 0;
 	}
 
 	public function getLastCommentDateByActor(string $objectType, string $objectId, string $verb, string $actorType, array $actors): array {
 		return [];
+	}
+
+	public function deleteCommentsExpiredAtObject(string $objectType, string $objectId = ''): bool {
+		return true;
 	}
 }

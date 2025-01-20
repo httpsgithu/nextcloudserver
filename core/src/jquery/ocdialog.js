@@ -1,29 +1,11 @@
 /**
- * @copyright 2018 Christoph Wurst <christoph@winzerhof-wurst.at>
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Gary Kim <gary@garykim.dev>
- * @author Joas Schilling <coding@schilljs.com>
- * @author John Molakvoæ <skjnldsv@protonmail.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2018 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 import $ from 'jquery'
+import { createFocusTrap } from 'focus-trap'
+import { isA11yActivation } from '../Util/a11y.js'
 
 $.widget('oc.ocdialog', {
 	options: {
@@ -46,15 +28,31 @@ $.widget('oc.ocdialog', {
 		this.originalTitle = this.element.attr('title')
 		this.options.title = this.options.title || this.originalTitle
 
-		this.$dialog = $('<div class="oc-dialog" />')
+		this.$dialog = $('<div class="oc-dialog"></div>')
 			.attr({
 				// Setting tabIndex makes the div focusable
 				tabIndex: -1,
 				role: 'dialog',
+				'aria-modal': true,
 			})
 			.insertBefore(this.element)
 		this.$dialog.append(this.element.detach())
 		this.element.removeAttr('title').addClass('oc-dialog-content').appendTo(this.$dialog)
+
+		// Activate the primary button on enter if there is a single input
+		if (self.element.find('input').length === 1) {
+			const $input = self.element.find('input')
+			$input.on('keydown', function(event) {
+				if (isA11yActivation(event)) {
+					if (self.$buttonrow) {
+						const $button = self.$buttonrow.find('button.primary')
+						if ($button && !$button.prop('disabled')) {
+							$button.click()
+						}
+					}
+				}
+			})
+		}
 
 		this.$dialog.css({
 			display: 'inline-block',
@@ -92,27 +90,15 @@ $.widget('oc.ocdialog', {
 					event.preventDefault()
 					return false
 				}
-				// If no button is selected we trigger the primary
-				if (
-					self.$buttonrow
-					&& self.$buttonrow.find($(event.target)).length === 0
-				) {
-					const $button = self.$buttonrow.find('button.primary')
-					if ($button && !$button.prop('disabled')) {
-						$button.trigger('click')
-					}
-				} else if (self.$buttonrow) {
-					$(event.target).trigger('click')
-				}
 				return false
 			}
 		})
 
 		this._setOptions(this.options)
 		this._createOverlay()
+		this._useFocusTrap()
 	},
 	_init() {
-		this.$dialog.focus()
 		this._trigger('open')
 	},
 	_setOption(key, value) {
@@ -133,7 +119,7 @@ $.widget('oc.ocdialog', {
 			if (this.$buttonrow) {
 				this.$buttonrow.empty()
 			} else {
-				const $buttonrow = $('<div class="oc-dialog-buttonrow" />')
+				const $buttonrow = $('<div class="oc-dialog-buttonrow"></div>')
 				this.$buttonrow = $buttonrow.appendTo(this.$dialog)
 			}
 			if (value.length === 1) {
@@ -153,8 +139,10 @@ $.widget('oc.ocdialog', {
 					self.$defaultButton = $button
 				}
 				self.$buttonrow.append($button)
-				$button.click(function() {
-					val.click.apply(self.element[0], arguments)
+				$button.on('click keydown', function(event) {
+					if (isA11yActivation(event)) {
+						val.click.apply(self.element[0], arguments)
+					}
 				})
 			})
 			this.$buttonrow.find('button')
@@ -171,11 +159,14 @@ $.widget('oc.ocdialog', {
 			break
 		case 'closeButton':
 			if (value) {
-				const $closeButton = $('<a class="oc-dialog-close"></a>')
+				const $closeButton = $('<button class="oc-dialog-close"></button>')
+				$closeButton.attr('aria-label', t('core', 'Close "{dialogTitle}" dialog', { dialogTitle: this.$title || this.options.title }))
 				this.$dialog.prepend($closeButton)
-				$closeButton.on('click', function() {
-					self.options.closeCallback && self.options.closeCallback()
-					self.close()
+				$closeButton.on('click keydown', function(event) {
+					if (isA11yActivation(event)) {
+						self.options.closeCallback && self.options.closeCallback()
+						self.close()
+					}
 				})
 			} else {
 				this.$dialog.find('.oc-dialog-close').remove()
@@ -223,7 +214,7 @@ $.widget('oc.ocdialog', {
 		}
 		this.overlay = $('<div>')
 			.addClass('oc-dialog-dim')
-			.appendTo(contentDiv)
+			.insertBefore(this.$dialog)
 		this.overlay.on('click keydown keyup', function(event) {
 			if (event.target !== self.$dialog.get(0) && self.$dialog.find($(event.target)).length === 0) {
 				event.preventDefault()
@@ -243,6 +234,23 @@ $.widget('oc.ocdialog', {
 			this.overlay = null
 		}
 	},
+	_useFocusTrap() {
+		// Create global stack if undefined
+		Object.assign(window, { _nc_focus_trap: window._nc_focus_trap || [] })
+
+		const dialogElement = this.$dialog[0]
+		this.focusTrap = createFocusTrap(dialogElement, {
+			allowOutsideClick: true,
+			trapStack: window._nc_focus_trap,
+			fallbackFocus: dialogElement,
+		})
+
+		this.focusTrap.activate()
+	},
+	_clearFocusTrap() {
+		this.focusTrap?.deactivate()
+		this.focusTrap = null
+	},
 	widget() {
 		return this.$dialog
 	},
@@ -253,6 +261,7 @@ $.widget('oc.ocdialog', {
 		this.enterCallback = null
 	},
 	close() {
+		this._clearFocusTrap()
 		this._destroyOverlay()
 		const self = this
 		// Ugly hack to catch remaining keyup events.

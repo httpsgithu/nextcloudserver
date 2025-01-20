@@ -1,24 +1,7 @@
 <?php
 /**
- * @copyright 2016 Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2016 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace Test\File\SimpleFS;
@@ -28,6 +11,7 @@ use OC\Files\Storage\Temporary;
 use OCP\Files\Folder;
 use OCP\Files\NotFoundException;
 use OCP\Files\SimpleFS\ISimpleFile;
+use OCP\Files\SimpleFS\ISimpleFolder;
 use Test\Traits\MountProviderTrait;
 use Test\Traits\UserTrait;
 
@@ -63,24 +47,24 @@ class SimpleFolderTest extends \Test\TestCase {
 		$this->simpleFolder = new SimpleFolder($this->folder);
 	}
 
-	public function testGetName() {
+	public function testGetName(): void {
 		$this->assertEquals('test', $this->simpleFolder->getName());
 	}
 
-	public function testDelete() {
+	public function testDelete(): void {
 		$this->assertTrue($this->parentFolder->nodeExists('test'));
 		$this->simpleFolder->delete();
 		$this->assertFalse($this->parentFolder->nodeExists('test'));
 	}
 
-	public function testFileExists() {
+	public function testFileExists(): void {
 		$this->folder->newFile('exists');
 
 		$this->assertFalse($this->simpleFolder->fileExists('not-exists'));
 		$this->assertTrue($this->simpleFolder->fileExists('exists'));
 	}
 
-	public function testGetFile() {
+	public function testGetFile(): void {
 		$this->folder->newFile('exists');
 
 		$result = $this->simpleFolder->getFile('exists');
@@ -90,7 +74,7 @@ class SimpleFolderTest extends \Test\TestCase {
 		$this->simpleFolder->getFile('not-exists');
 	}
 
-	public function testNewFile() {
+	public function testNewFile(): void {
 		$result = $this->simpleFolder->newFile('file');
 		$this->assertInstanceOf(ISimpleFile::class, $result);
 		$this->assertFalse($this->folder->nodeExists('file'));
@@ -100,7 +84,7 @@ class SimpleFolderTest extends \Test\TestCase {
 		$this->assertEquals('bar', $result->getContent());
 	}
 
-	public function testGetDirectoryListing() {
+	public function testGetDirectoryListing(): void {
 		$this->folder->newFile('file1');
 		$this->folder->newFile('file2');
 
@@ -108,5 +92,23 @@ class SimpleFolderTest extends \Test\TestCase {
 		$this->assertCount(2, $result);
 		$this->assertInstanceOf(ISimpleFile::class, $result[0]);
 		$this->assertInstanceOf(ISimpleFile::class, $result[1]);
+	}
+
+	public function testGetFolder(): void {
+		$this->folder->newFolder('exists');
+
+		$result = $this->simpleFolder->getFolder('exists');
+		$this->assertInstanceOf(ISimpleFolder::class, $result);
+
+		$this->expectException(NotFoundException::class);
+		$this->simpleFolder->getFolder('not-exists');
+	}
+
+	public function testNewFolder(): void {
+		$result = $this->simpleFolder->newFolder('folder');
+		$this->assertInstanceOf(ISimpleFolder::class, $result);
+		$result->newFile('file');
+
+		$this->assertTrue($this->folder->nodeExists('folder'));
 	}
 }

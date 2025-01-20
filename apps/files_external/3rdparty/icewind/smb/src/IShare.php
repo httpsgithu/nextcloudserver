@@ -1,8 +1,7 @@
 <?php
 /**
- * Copyright (c) 2014 Robin Appelman <icewind@owncloud.com>
- * This file is licensed under the Licensed under the MIT license:
- * http://opensource.org/licenses/MIT
+ * SPDX-FileCopyrightText: 2014 Robin Appelman <robin@icewind.nl>
+ * SPDX-License-Identifier: MIT
  */
 
 namespace Icewind\SMB;
@@ -23,7 +22,7 @@ interface IShare {
 	/**
 	 * Download a remote file
 	 *
-	 * @param string $source remove file
+	 * @param string $source remote file
 	 * @param string $target local file
 	 * @return bool
 	 *
@@ -36,7 +35,7 @@ interface IShare {
 	 * Upload a local file
 	 *
 	 * @param string $source local file
-	 * @param string $target remove file
+	 * @param string $target remote file
 	 * @return bool
 	 *
 	 * @throws NotFoundException
@@ -45,7 +44,7 @@ interface IShare {
 	public function put(string $source, string $target): bool;
 
 	/**
-	 * Open a readable stream top a remote file
+	 * Open a readable stream to a remote file
 	 *
 	 * @param string $source
 	 * @return resource a read only stream with the contents of the remote file

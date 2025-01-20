@@ -1,39 +1,16 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Bernhard Reiter <ockham@raz.or.at>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Daniel Kesselberg <mail@danielkesselberg.de>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Thomas Tanghus <thomas@tanghus.net>
- * @author Vincent Petry <vincent@nextcloud.com>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 // use OCP namespace for all classes that are considered public.
-// This means that they should be used by apps instead of the internal ownCloud classes
+// This means that they should be used by apps instead of the internal Nextcloud classes
 
 namespace OCP;
 
 use OC\Tags;
-
-// FIXME: Where should I put this? Or should it be implemented as a Listener?
-\OC_Hook::connect('OC_User', 'post_deleteUser', Tags::class, 'post_deleteUser');
 
 /**
  * Class for easily tagging objects by their id
@@ -55,11 +32,9 @@ interface ITags {
 
 	/**
 	 * Check if any tags are saved for this type and user.
-	 *
-	 * @return boolean
 	 * @since 6.0.0
 	 */
-	public function isEmpty();
+	public function isEmpty(): bool;
 
 	/**
 	 * Returns an array mapping a given tag's properties to its values:
@@ -69,35 +44,41 @@ interface ITags {
 	 * @return array|false
 	 * @since 8.0.0
 	 */
-	public function getTag($id);
+	public function getTag(string $id);
 
 	/**
 	 * Get the tags for a specific user.
 	 *
 	 * This returns an array with id/name maps:
+	 *
+	 * ```php
 	 * [
 	 * 	['id' => 0, 'name' = 'First tag'],
 	 * 	['id' => 1, 'name' = 'Second tag'],
 	 * ]
+	 * ```
 	 *
-	 * @return array
+	 * @return array<array-key, array{id: int, name: string}>
 	 * @since 6.0.0
 	 */
-	public function getTags();
+	public function getTags(): array;
 
 	/**
 	 * Get a list of tags for the given item ids.
 	 *
 	 * This returns an array with object id / tag names:
+	 *
+	 * ```php
 	 * [
 	 *   1 => array('First tag', 'Second tag'),
 	 *   2 => array('Second tag'),
 	 *   3 => array('Second tag', 'Third tag'),
 	 * ]
+	 * ```
 	 *
-	 * @param array $objIds item ids
-	 * @return array|boolean with object id as key and an array
-	 * of tag names as value or false if an error occurred
+	 * @param list<int> $objIds item ids
+	 * @return array<int, list<string>>|false with object id as key and an array
+	 *                                        of tag names as value or false if an error occurred
 	 * @since 8.0.0
 	 */
 	public function getTagsForObjects(array $objIds);
@@ -117,21 +98,20 @@ interface ITags {
 	 * Checks whether a tag is already saved.
 	 *
 	 * @param string $name The name to check for.
-	 * @return bool
 	 * @since 6.0.0
 	 */
-	public function hasTag($name);
+	public function hasTag(string $name): bool;
 
 	/**
 	 * Checks whether a tag is saved for the given user,
-	 * disregarding the ones shared with him or her.
+	 * disregarding the ones shared with them.
 	 *
 	 * @param string $name The tag name to check for.
 	 * @param string $user The user whose tags are to be checked.
 	 * @return bool
 	 * @since 8.0.0
 	 */
-	public function userHasTag($name, $user);
+	public function userHasTag(string $name, string $user): bool;
 
 	/**
 	 * Add a new tag.
@@ -140,7 +120,7 @@ interface ITags {
 	 * @return int|false the id of the added tag or false if it already exists.
 	 * @since 6.0.0
 	 */
-	public function add($name);
+	public function add(string $name);
 
 	/**
 	 * Rename tag.
@@ -150,19 +130,19 @@ interface ITags {
 	 * @return bool
 	 * @since 6.0.0
 	 */
-	public function rename($from, $to);
+	public function rename($from, string $to): bool;
 
 	/**
 	 * Add a list of new tags.
 	 *
-	 * @param string[] $names A string with a name or an array of strings containing
-	 * the name(s) of the to add.
+	 * @param string|string[] $names A string with a name or an array of strings containing
+	 *                               the name(s) of the to add.
 	 * @param bool $sync When true, save the tags
 	 * @param int|null $id int Optional object id to add to this|these tag(s)
 	 * @return bool Returns false on error.
 	 * @since 6.0.0
 	 */
-	public function addMultiple($names, $sync = false, $id = null);
+	public function addMultiple($names, bool $sync = false, ?int $id = null): bool;
 
 	/**
 	 * Delete tag/object relations from the db

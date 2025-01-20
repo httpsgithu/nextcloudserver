@@ -3,11 +3,11 @@ OC.L10N.register(
     {
     "Dashboard" : "Dashboard",
     "Dashboard app" : "Dashboard-App",
-    "Show something" : "Etwas anzeigen",
+    "Start your day informed\n\nThe Nextcloud Dashboard is your starting point of the day, giving you an overview of your upcoming appointments, urgent emails, chat messages, incoming tickets, latest tweets and much more! People can add the widgets they like and change the background to their liking." : "Starten Sie informiert in den Tag\n\nDas Nextcloud Dashboard ist Ihr Ausgangspunkt für den Tag und gibt Ihnen einen Überblick über Ihre anstehenden Termine, dringende E-Mails, Chatnachrichten, eingehende Tickets, neueste Tweets und vieles mehr! Benutzer können die gewünschten Widgets hinzufügen und den Hintergrund nach Belieben ändern.",
+    "\"{title} icon\"" : "\"{title}-Symbol\"",
     "Customize" : "Anpassen",
     "Edit widgets" : "Widgets bearbeiten",
     "Get more widgets from the App Store" : "Holen Sie sich weitere Widgets aus dem App-Store",
-    "Change background image" : "Hintergrundbild ändern",
     "Weather service" : "Wetterdienst",
     "For your privacy, the weather data is requested by your Nextcloud server on your behalf so the weather service receives no personal information." : "Zu Ihrem Datenschutz werden die Wetterdaten von Ihrem Nextcloud-Server für Sie angefordert, so dass der Wetterdienst keine persönlichen Informationen erhält.",
     "Weather data from Met.no" : "Wetterdaten von Met.no",
@@ -23,13 +23,8 @@ OC.L10N.register(
     "Good evening, {name}" : "Guten Abend {name}",
     "Hello" : "Hallo",
     "Hello, {name}" : "Hallo, {name}",
-    "Pick from Files" : "Aus Dateien auswählen",
-    "Default images" : "Standardbilder",
-    "Plain background" : "Einfacher Hintergrund",
-    "Insert from {productName}" : "Von {productName} einfügen",
-    "Get more widgets from the app store" : "Holen Sie sich weitere Widgets aus dem App Store",
-    "Good night, {name}" : "Gute Nacht {name}",
-    "Good night" : "Gute Nacht",
-    "Pick from files" : "Aus Dateien wählen"
+    "Happy birthday 🥳🤩🎂🎉" : "Alles Gute zum Geburtstag 🥳🤩🎂🎉",
+    "Happy birthday, {name} 🥳🤩🎂🎉" : "Alles Gute zum Geburtstag, {name} 🥳🤩🎂🎉",
+    "Start your day informed\n\nThe Nextcloud Dashboard is your starting point of the day, giving you an overview of your upcoming appointments, urgent emails, chat messages, incoming tickets, latest tweets and much more! Users can add the widgets they like and change the background to their liking." : "Starten Sie informiert in den Tag\n\nDas Nextcloud Dashboard ist Ihr Ausgangspunkt für den Tag und gibt Ihnen einen Überblick über Ihre anstehenden Termine, dringende E-Mails, Chatnachrichten, eingehende Tickets, neueste Tweets und vieles mehr! Benutzer können die gewünschten Widgets hinzufügen und den Hintergrund nach Belieben ändern."
 },
 "nplurals=2; plural=(n != 1);");

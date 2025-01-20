@@ -1,8 +1,8 @@
 
 /**
- * Copyright (c) 2015, Arthur Schiwon <blizzz@owncloud.com>
- * This file is licensed under the Affero General Public License version 3 or later.
- * See the COPYING-README file.
+ * SPDX-FileCopyrightText: 2017-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2015 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 OCA = OCA || {};
@@ -22,8 +22,8 @@ OCA = OCA || {};
 		/**
 		 * initializes the instance. Always call it after initialization.
 		 *
-		 * @param tabIndex
-		 * @param tabID
+		 * @param {any} tabIndex -
+		 * @param {any} tabID -
 		 */
 		init: function (tabIndex, tabID) {
 			tabIndex = 0;
@@ -245,8 +245,8 @@ OCA = OCA || {};
 		 * updates the configuration chooser upon the deletion of a
 		 * configuration and, if necessary, loads an existing one.
 		 *
-		 * @param view
-		 * @param result
+		 * @param {any} view -
+		 * @param {any} result -
 		 */
 		onDeleteConfiguration: function(view, result) {
 			if(result.isSuccess === true) {

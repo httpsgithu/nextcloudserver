@@ -3,48 +3,28 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2018 Arthur Schiwon <blizzz@arthur-schiwon.de>
- *
- * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Daniel Kesselberg <mail@danielkesselberg.de>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2018 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 namespace OC\Updater;
 
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
-use OCP\ILogger;
+use Psr\Log\LoggerInterface;
 
 class ChangesCheck {
 	/** @var IClientService */
 	protected $clientService;
 	/** @var ChangesMapper */
 	private $mapper;
-	/** @var ILogger */
-	private $logger;
+	private LoggerInterface $logger;
 
 	public const RESPONSE_NO_CONTENT = 0;
 	public const RESPONSE_USE_CACHE = 1;
 	public const RESPONSE_HAS_CONTENT = 2;
 
-	public function __construct(IClientService $clientService, ChangesMapper $mapper, ILogger $logger) {
+	public function __construct(IClientService $clientService, ChangesMapper $mapper, LoggerInterface $logger) {
 		$this->clientService = $clientService;
 		$this->mapper = $mapper;
 		$this->logger = $logger;
@@ -52,6 +32,7 @@ class ChangesCheck {
 
 	/**
 	 * @throws DoesNotExistException
+	 * @return array{changelogURL: string, whatsNew: array<string, array{admin: list<string>, regular: list<string>}>}
 	 */
 	public function getChangesForVersion(string $version): array {
 		$version = $this->normalizeVersion($version);
@@ -74,7 +55,7 @@ class ChangesCheck {
 				return json_decode($changesInfo->getData(), true);
 			}
 		} catch (DoesNotExistException $e) {
-			$changesInfo = new ChangesResult();
+			$changesInfo = new Changes();
 		}
 
 		$response = $this->queryChangesServer($uri, $changesInfo);
@@ -110,7 +91,7 @@ class ChangesCheck {
 		return self::RESPONSE_NO_CONTENT;
 	}
 
-	protected function cacheResult(ChangesResult $entry, string $version) {
+	protected function cacheResult(Changes $entry, string $version) {
 		if ($entry->getVersion() === $version) {
 			$this->mapper->update($entry);
 		} else {
@@ -122,7 +103,7 @@ class ChangesCheck {
 	/**
 	 * @throws \Exception
 	 */
-	protected function queryChangesServer(string $uri, ChangesResult $entry): IResponse {
+	protected function queryChangesServer(string $uri, Changes $entry): IResponse {
 		$headers = [];
 		if ($entry->getEtag() !== '') {
 			$headers['If-None-Match'] = [$entry->getEtag()];
@@ -138,9 +119,13 @@ class ChangesCheck {
 	protected function extractData($body):array {
 		$data = [];
 		if ($body) {
-			$loadEntities = libxml_disable_entity_loader(true);
-			$xml = @simplexml_load_string($body);
-			libxml_disable_entity_loader($loadEntities);
+			if (\LIBXML_VERSION < 20900) {
+				$loadEntities = libxml_disable_entity_loader(true);
+				$xml = @simplexml_load_string($body);
+				libxml_disable_entity_loader($loadEntities);
+			} else {
+				$xml = @simplexml_load_string($body);
+			}
 			if ($xml !== false) {
 				$data['changelogURL'] = (string)$xml->changelog['href'];
 				$data['whatsNew'] = [];

@@ -1,69 +1,50 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Ardinis <Ardinis@users.noreply.github.com>
- * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
- * @author Bart Visscher <bartv@thisnet.nl>
- * @author Björn Schießle <bjoern@schiessle.org>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Daniel Kesselberg <mail@danielkesselberg.de>
- * @author Felix Moeller <mail@felixmoeller.de>
- * @author J0WI <J0WI@users.noreply.github.com>
- * @author Jakob Sack <mail@jakobsack.de>
- * @author Jan-Christoph Borchardt <hey@jancborchardt.net>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Jörn Friedrich Dreyer <jfd@butonic.de>
- * @author Julius Härtl <jus@bitgrid.net>
- * @author Lukas Reschke <lukas@statuscode.ch>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Olivier Paroz <github@oparoz.com>
- * @author Pellaeon Lin <nfsmwlin@gmail.com>
- * @author RealRancor <fisch.666@gmx.de>
- * @author Robin Appelman <robin@icewind.nl>
- * @author Robin McCorkell <robin@mccorkell.me.uk>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Simon Könnecke <simonkoennecke@gmail.com>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
- * @author Thomas Tanghus <thomas@tanghus.net>
- * @author Vincent Petry <vincent@nextcloud.com>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 use bantu\IniGetWrapper\IniGetWrapper;
+use OC\Files\FilenameValidator;
+use OC\Files\Filesystem;
 use OCP\Files\Mount\IMountPoint;
+use OCP\IBinaryFinder;
+use OCP\ICacheFactory;
 use OCP\IUser;
-use Symfony\Component\Process\ExecutableFinder;
+use OCP\Util;
+use Psr\Log\LoggerInterface;
 
 /**
  * Collection of useful functions
+ *
+ * @psalm-type StorageInfo = array{
+ *     free: float|int,
+ *     mountPoint: string,
+ *     mountType: string,
+ *     owner: string,
+ *     ownerDisplayName: string,
+ *     quota: float|int,
+ *     relative: float|int,
+ *     total: float|int,
+ *     used: float|int,
+ * }
  */
 class OC_Helper {
 	private static $templateManager;
+	private static ?ICacheFactory $cacheFactory = null;
+	private static ?bool $quotaIncludeExternalStorage = null;
 
 	/**
 	 * Make a human file size
-	 * @param int $bytes file size in bytes
+	 * @param int|float $bytes file size in bytes
 	 * @return string a human readable file size
 	 *
 	 * Makes 2048 to 2 kB.
 	 */
-	public static function humanFileSize($bytes) {
+	public static function humanFileSize(int|float $bytes): string {
 		if ($bytes < 0) {
-			return "?";
+			return '?';
 		}
 		if ($bytes < 1024) {
 			return "$bytes B";
@@ -92,16 +73,16 @@ class OC_Helper {
 	/**
 	 * Make a computer file size
 	 * @param string $str file size in human readable format
-	 * @return float|bool a file size in bytes
+	 * @return false|int|float a file size in bytes
 	 *
 	 * Makes 2kB to 2048.
 	 *
 	 * Inspired by: https://www.php.net/manual/en/function.filesize.php#92418
 	 */
-	public static function computerFileSize($str) {
+	public static function computerFileSize(string $str): false|int|float {
 		$str = strtolower($str);
 		if (is_numeric($str)) {
-			return (float)$str;
+			return Util::numericToNumber($str);
 		}
 
 		$bytes_array = [
@@ -120,36 +101,41 @@ class OC_Helper {
 
 		$bytes = (float)$str;
 
-		if (preg_match('#([kmgtp]?b?)$#si', $str, $matches) && !empty($bytes_array[$matches[1]])) {
+		if (preg_match('#([kmgtp]?b?)$#si', $str, $matches) && isset($bytes_array[$matches[1]])) {
 			$bytes *= $bytes_array[$matches[1]];
 		} else {
 			return false;
 		}
 
-		$bytes = round($bytes);
-
-		return $bytes;
+		return Util::numericToNumber(round($bytes));
 	}
 
 	/**
 	 * Recursive copying of folders
 	 * @param string $src source folder
 	 * @param string $dest target folder
-	 *
+	 * @return void
 	 */
 	public static function copyr($src, $dest) {
+		if (!file_exists($src)) {
+			return;
+		}
+
 		if (is_dir($src)) {
 			if (!is_dir($dest)) {
 				mkdir($dest);
 			}
 			$files = scandir($src);
 			foreach ($files as $file) {
-				if ($file != "." && $file != "..") {
+				if ($file != '.' && $file != '..') {
 					self::copyr("$src/$file", "$dest/$file");
 				}
 			}
-		} elseif (file_exists($src) && !\OC\Files\Filesystem::isFileBlacklisted($src)) {
-			copy($src, $dest);
+		} else {
+			$validator = \OCP\Server::get(FilenameValidator::class);
+			if (!$validator->isForbidden($src)) {
+				copy($src, $dest);
+			}
 		}
 	}
 
@@ -209,21 +195,21 @@ class OC_Helper {
 	 * @param bool $path
 	 * @internal param string $program name
 	 * @internal param string $optional search path, defaults to $PATH
-	 * @return bool    true if executable program found in path
+	 * @return bool true if executable program found in path
 	 */
 	public static function canExecute($name, $path = false) {
 		// path defaults to PATH from environment if not set
 		if ($path === false) {
-			$path = getenv("PATH");
+			$path = getenv('PATH');
 		}
 		// we look for an executable file of that name
-		$exts = [""];
-		$check_fn = "is_executable";
+		$exts = [''];
+		$check_fn = 'is_executable';
 		// Default check will be done with $path directories :
 		$dirs = explode(PATH_SEPARATOR, $path);
 		// WARNING : We have to check if open_basedir is enabled :
 		$obd = OC::$server->get(IniGetWrapper::class)->getString('open_basedir');
-		if ($obd != "none") {
+		if ($obd != 'none') {
 			$obd_values = explode(PATH_SEPARATOR, $obd);
 			if (count($obd_values) > 0 and $obd_values[0]) {
 				// open_basedir is in effect !
@@ -384,8 +370,8 @@ class OC_Helper {
 	 * calculates the maximum upload size respecting system settings, free space and user quota
 	 *
 	 * @param string $dir the current folder where the user currently operates
-	 * @param int $freeSpace the number of bytes free on the storage holding $dir, if not set this will be received from the storage directly
-	 * @return int number of bytes representing
+	 * @param int|float $freeSpace the number of bytes free on the storage holding $dir, if not set this will be received from the storage directly
+	 * @return int|float number of bytes representing
 	 */
 	public static function maxUploadFilesize($dir, $freeSpace = null) {
 		if (is_null($freeSpace) || $freeSpace < 0) {
@@ -398,7 +384,7 @@ class OC_Helper {
 	 * Calculate free space left within user quota
 	 *
 	 * @param string $dir the current folder where the user currently operates
-	 * @return int number of bytes representing
+	 * @return int|float number of bytes representing
 	 */
 	public static function freeSpace($dir) {
 		$freeSpace = \OC\Files\Filesystem::free_space($dir);
@@ -413,15 +399,15 @@ class OC_Helper {
 	/**
 	 * Calculate PHP upload limit
 	 *
-	 * @return int PHP upload file size limit
+	 * @return int|float PHP upload file size limit
 	 */
 	public static function uploadLimit() {
 		$ini = \OC::$server->get(IniGetWrapper::class);
-		$upload_max_filesize = OCP\Util::computerFileSize($ini->get('upload_max_filesize'));
-		$post_max_size = OCP\Util::computerFileSize($ini->get('post_max_size'));
-		if ((int)$upload_max_filesize === 0 and (int)$post_max_size === 0) {
+		$upload_max_filesize = Util::computerFileSize($ini->get('upload_max_filesize')) ?: 0;
+		$post_max_size = Util::computerFileSize($ini->get('post_max_size')) ?: 0;
+		if ($upload_max_filesize === 0 && $post_max_size === 0) {
 			return INF;
-		} elseif ((int)$upload_max_filesize === 0 or (int)$post_max_size === 0) {
+		} elseif ($upload_max_filesize === 0 || $post_max_size === 0) {
 			return max($upload_max_filesize, $post_max_size); //only the non 0 value counts
 		} else {
 			return min($upload_max_filesize, $post_max_size);
@@ -431,47 +417,19 @@ class OC_Helper {
 	/**
 	 * Checks if a function is available
 	 *
-	 * @param string $function_name
-	 * @return bool
+	 * @deprecated 25.0.0 use \OCP\Util::isFunctionEnabled instead
 	 */
-	public static function is_function_enabled($function_name) {
-		if (!function_exists($function_name)) {
-			return false;
-		}
-		$ini = \OC::$server->get(IniGetWrapper::class);
-		$disabled = explode(',', $ini->get('disable_functions') ?: '');
-		$disabled = array_map('trim', $disabled);
-		if (in_array($function_name, $disabled)) {
-			return false;
-		}
-		$disabled = explode(',', $ini->get('suhosin.executor.func.blacklist') ?: '');
-		$disabled = array_map('trim', $disabled);
-		if (in_array($function_name, $disabled)) {
-			return false;
-		}
-		return true;
+	public static function is_function_enabled(string $function_name): bool {
+		return \OCP\Util::isFunctionEnabled($function_name);
 	}
 
 	/**
 	 * Try to find a program
-	 *
-	 * @param string $program
-	 * @return null|string
+	 * @deprecated 25.0.0 Use \OC\BinaryFinder directly
 	 */
-	public static function findBinaryPath($program) {
-		$memcache = \OC::$server->getMemCacheFactory()->createDistributed('findBinaryPath');
-		if ($memcache->hasKey($program)) {
-			return $memcache->get($program);
-		}
-		$result = null;
-		if (self::is_function_enabled('exec')) {
-			$exeSniffer = new ExecutableFinder();
-			// Returns null if nothing is found
-			$result = $exeSniffer->find($program, null, ['/usr/local/sbin', '/usr/local/bin', '/usr/sbin', '/usr/bin', '/sbin', '/bin', '/opt/bin']);
-		}
-		// store the value for 5 minutes
-		$memcache->set($program, $result, 300);
-		return $result;
+	public static function findBinaryPath(string $program): ?string {
+		$result = \OCP\Server::get(IBinaryFinder::class)->findBinaryPath($program);
+		return $result !== false ? $result : null;
 	}
 
 	/**
@@ -482,32 +440,56 @@ class OC_Helper {
 	 *
 	 * @param string $path
 	 * @param \OCP\Files\FileInfo $rootInfo (optional)
-	 * @return array
+	 * @param bool $includeMountPoints whether to include mount points in the size calculation
+	 * @param bool $useCache whether to use the cached quota values
+	 * @psalm-suppress LessSpecificReturnStatement Legacy code outputs weird types - manually validated that they are correct
+	 * @return StorageInfo
 	 * @throws \OCP\Files\NotFoundException
 	 */
-	public static function getStorageInfo($path, $rootInfo = null) {
-		// return storage info without adding mount points
-		$includeExtStorage = \OC::$server->getSystemConfig()->getValue('quota_include_external_storage', false);
-
-		if (!$rootInfo) {
-			$rootInfo = \OC\Files\Filesystem::getFileInfo($path, $includeExtStorage ? 'ext' : false);
+	public static function getStorageInfo($path, $rootInfo = null, $includeMountPoints = true, $useCache = true) {
+		if (!self::$cacheFactory) {
+			self::$cacheFactory = \OC::$server->get(ICacheFactory::class);
 		}
-		if (!$rootInfo instanceof \OCP\Files\FileInfo) {
+		$memcache = self::$cacheFactory->createLocal('storage_info');
+
+		// return storage info without adding mount points
+		if (self::$quotaIncludeExternalStorage === null) {
+			self::$quotaIncludeExternalStorage = \OC::$server->getSystemConfig()->getValue('quota_include_external_storage', false);
+		}
+
+		$view = Filesystem::getView();
+		if (!$view) {
 			throw new \OCP\Files\NotFoundException();
 		}
-		$used = $rootInfo->getSize();
-		if ($used < 0) {
-			$used = 0;
+		$fullPath = Filesystem::normalizePath($view->getAbsolutePath($path));
+
+		$cacheKey = $fullPath . '::' . ($includeMountPoints ? 'include' : 'exclude');
+		if ($useCache) {
+			$cached = $memcache->get($cacheKey);
+			if ($cached) {
+				return $cached;
+			}
 		}
+
+		if (!$rootInfo) {
+			$rootInfo = \OC\Files\Filesystem::getFileInfo($path, self::$quotaIncludeExternalStorage ? 'ext' : false);
+		}
+		if (!$rootInfo instanceof \OCP\Files\FileInfo) {
+			throw new \OCP\Files\NotFoundException('The root directory of the user\'s files is missing');
+		}
+		$used = $rootInfo->getSize($includeMountPoints);
+		if ($used < 0) {
+			$used = 0.0;
+		}
+		/** @var int|float $quota */
 		$quota = \OCP\Files\FileInfo::SPACE_UNLIMITED;
 		$mount = $rootInfo->getMountPoint();
 		$storage = $mount->getStorage();
 		$sourceStorage = $storage;
 		if ($storage->instanceOfStorage('\OCA\Files_Sharing\SharedStorage')) {
-			$includeExtStorage = false;
-			$sourceStorage = $storage->getSourceStorage();
+			self::$quotaIncludeExternalStorage = false;
 		}
-		if ($includeExtStorage) {
+		if (self::$quotaIncludeExternalStorage) {
 			if ($storage->instanceOfStorage('\OC\Files\Storage\Home')
 				|| $storage->instanceOfStorage('\OC\Files\ObjectStore\HomeObjectStoreStorage')
 			) {
@@ -528,7 +510,22 @@ class OC_Helper {
 			/** @var \OC\Files\Storage\Wrapper\Quota $storage */
 			$quota = $sourceStorage->getQuota();
 		}
-		$free = $sourceStorage->free_space($rootInfo->getInternalPath());
+		try {
+			$free = $sourceStorage->free_space($rootInfo->getInternalPath());
+			if (is_bool($free)) {
+				$free = 0.0;
+			}
+		} catch (\Exception $e) {
+			if ($path === '') {
+				throw $e;
+			}
+			/** @var LoggerInterface $logger */
+			$logger = \OC::$server->get(LoggerInterface::class);
+			$logger->warning('Error while getting quota info, using root quota', ['exception' => $e]);
+			$rootInfo = self::getStorageInfo('');
+			$memcache->set($cacheKey, $rootInfo, 5 * 60);
+			return $rootInfo;
+		}
 		if ($free >= 0) {
 			$total = $free + $used;
 		} else {
@@ -546,17 +543,17 @@ class OC_Helper {
 
 		$ownerId = $storage->getOwner($path);
 		$ownerDisplayName = '';
-		$owner = \OC::$server->getUserManager()->get($ownerId);
-		if ($owner) {
-			$ownerDisplayName = $owner->getDisplayName();
+		if ($ownerId !== false) {
+			$ownerDisplayName = \OC::$server->getUserManager()->getDisplayName($ownerId) ?? '';
 		}
+
 		if (substr_count($mount->getMountPoint(), '/') < 3) {
 			$mountPoint = '';
 		} else {
 			[,,,$mountPoint] = explode('/', $mount->getMountPoint(), 4);
 		}
 
-		return [
+		$info = [
 			'free' => $free,
 			'used' => $used,
 			'quota' => $quota,
@@ -567,19 +564,33 @@ class OC_Helper {
 			'mountType' => $mount->getMountType(),
 			'mountPoint' => trim($mountPoint, '/'),
 		];
+
+		if ($ownerId && $path === '/') {
+			// If path is root, store this as last known quota usage for this user
+			\OCP\Server::get(\OCP\IConfig::class)->setUserValue($ownerId, 'files', 'lastSeenQuotaUsage', (string)$relative);
+		}
+
+		$memcache->set($cacheKey, $info, 5 * 60);
+
+		return $info;
 	}
 
 	/**
 	 * Get storage info including all mount points and quota
+	 *
+	 * @psalm-suppress LessSpecificReturnStatement Legacy code outputs weird types - manually validated that they are correct
+	 * @return StorageInfo
 	 */
-	private static function getGlobalStorageInfo(int $quota, IUser $user, IMountPoint $mount): array {
+	private static function getGlobalStorageInfo(int|float $quota, IUser $user, IMountPoint $mount): array {
 		$rootInfo = \OC\Files\Filesystem::getFileInfo('', 'ext');
+		/** @var int|float $used */
 		$used = $rootInfo['size'];
 		if ($used < 0) {
-			$used = 0;
+			$used = 0.0;
 		}
 
 		$total = $quota;
+		/** @var int|float $free */
 		$free = $quota - $used;
 
 		if ($total > 0) {
@@ -589,7 +600,7 @@ class OC_Helper {
 			// prevent division by zero or error codes (negative values)
 			$relative = round(($used / $total) * 10000) / 100;
 		} else {
-			$relative = 0;
+			$relative = 0.0;
 		}
 
 		if (substr_count($mount->getMountPoint(), '/') < 3) {
@@ -611,11 +622,20 @@ class OC_Helper {
 		];
 	}
 
+	public static function clearStorageInfo(string $absolutePath): void {
+		/** @var ICacheFactory $cacheFactory */
+		$cacheFactory = \OC::$server->get(ICacheFactory::class);
+		$memcache = $cacheFactory->createLocal('storage_info');
+		$cacheKeyPrefix = Filesystem::normalizePath($absolutePath) . '::';
+		$memcache->remove($cacheKeyPrefix . 'include');
+		$memcache->remove($cacheKeyPrefix . 'exclude');
+	}
+
 	/**
 	 * Returns whether the config file is set manually to read-only
 	 * @return bool
 	 */
 	public static function isReadOnlyConfigEnabled() {
-		return \OC::$server->getConfig()->getSystemValue('config_is_read_only', false);
+		return \OC::$server->getConfig()->getSystemValueBool('config_is_read_only', false);
 	}
 }

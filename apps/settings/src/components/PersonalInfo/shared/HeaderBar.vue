@@ -1,72 +1,71 @@
 <!--
-	- @copyright 2021, Christopher Ng <chrng8@gmail.com>
-	-
-	- @author Christopher Ng <chrng8@gmail.com>
-	-
-	- @license GNU AGPL version 3 or any later version
-	-
-	- This program is free software: you can redistribute it and/or modify
-	- it under the terms of the GNU Affero General Public License as
-	- published by the Free Software Foundation, either version 3 of the
-	- License, or (at your option) any later version.
-	-
-	- This program is distributed in the hope that it will be useful,
-	- but WITHOUT ANY WARRANTY; without even the implied warranty of
-	- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-	- GNU Affero General Public License for more details.
-	-
-	- You should have received a copy of the GNU Affero General Public License
-	- along with this program. If not, see <http://www.gnu.org/licenses/>.
+  - SPDX-FileCopyrightText: 2021 Nextcloud GmbH and Nextcloud contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 
 <template>
-	<h3
-		:class="{ 'setting-property': isSettingProperty }">
-		<label :for="labelFor">
+	<div class="headerbar-label" :class="{ 'setting-property': isSettingProperty, 'profile-property': isProfileProperty }">
+		<h3 v-if="isHeading" class="headerbar__heading">
 			<!-- Already translated as required by prop validator -->
-			{{ accountProperty }}
+			{{ readable }}
+		</h3>
+		<label v-else :for="inputId">
+			<!-- Already translated as required by prop validator -->
+			{{ readable }}
 		</label>
 
-		<template v-if="scope && handleScopeChange">
-			<FederationControl
-				class="federation-control"
-				:account-property="accountProperty"
-				:handle-scope-change="handleScopeChange"
+		<template v-if="scope">
+			<FederationControl class="federation-control"
+				:readable="readable"
 				:scope.sync="localScope"
 				@update:scope="onScopeChange" />
 		</template>
 
 		<template v-if="isEditable && isMultiValueSupported">
-			<AddButton
-				class="add-button"
+			<NcButton type="tertiary"
 				:disabled="!isValidSection"
-				@click.stop.prevent="onAddAdditional" />
+				:aria-label="t('settings', 'Add additional email')"
+				@click.stop.prevent="onAddAdditional">
+				<template #icon>
+					<Plus :size="20" />
+				</template>
+				{{ t('settings', 'Add') }}
+			</NcButton>
 		</template>
-	</h3>
+	</div>
 </template>
 
 <script>
-import AddButton from './AddButton'
-import FederationControl from './FederationControl'
+import NcButton from '@nextcloud/vue/dist/Components/NcButton.js'
+import Plus from 'vue-material-design-icons/Plus.vue'
 
-import { ACCOUNT_PROPERTY_READABLE_ENUM, SETTING_PROPERTY_READABLE_ENUM } from '../../../constants/AccountPropertyConstants'
+import FederationControl from './FederationControl.vue'
+
+import {
+	ACCOUNT_PROPERTY_READABLE_ENUM,
+	PROFILE_READABLE_ENUM,
+} from '../../../constants/AccountPropertyConstants.js'
 
 export default {
 	name: 'HeaderBar',
 
 	components: {
-		AddButton,
 		FederationControl,
+		NcButton,
+		Plus,
 	},
 
 	props: {
-		accountProperty: {
+		scope: {
+			type: String,
+			default: null,
+		},
+		readable: {
 			type: String,
 			required: true,
-			validator: (value) => Object.values(ACCOUNT_PROPERTY_READABLE_ENUM).includes(value) || Object.values(SETTING_PROPERTY_READABLE_ENUM).includes(value),
 		},
-		handleScopeChange: {
-			type: Function,
+		inputId: {
+			type: String,
 			default: null,
 		},
 		isEditable: {
@@ -79,15 +78,11 @@ export default {
 		},
 		isValidSection: {
 			type: Boolean,
+			default: true,
+		},
+		isHeading: {
+			type: Boolean,
 			default: false,
-		},
-		labelFor: {
-			type: String,
-			required: true,
-		},
-		scope: {
-			type: String,
-			default: null,
 		},
 	},
 
@@ -98,8 +93,12 @@ export default {
 	},
 
 	computed: {
+		isProfileProperty() {
+			return this.readable === ACCOUNT_PROPERTY_READABLE_ENUM.PROFILE_ENABLED
+		},
+
 		isSettingProperty() {
-			return Object.values(SETTING_PROPERTY_READABLE_ENUM).includes(this.accountProperty)
+			return !Object.values(ACCOUNT_PROPERTY_READABLE_ENUM).includes(this.readable) && !Object.values(PROFILE_READABLE_ENUM).includes(this.readable)
 		},
 	},
 
@@ -116,15 +115,22 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-	h3 {
+	.headerbar-label {
+		font-weight: normal;
 		display: inline-flex;
 		width: 100%;
 		margin: 12px 0 0 0;
+		gap: 8px;
+		align-items: center;
 		font-size: 16px;
 		color: var(--color-text-light);
 
-		&.setting-property {
+		&.profile-property {
 			height: 38px;
+		}
+
+		&.setting-property {
+			height: 34px;
 		}
 
 		label {
@@ -132,11 +138,16 @@ export default {
 		}
 	}
 
-	.federation-control {
-		margin: -12px 0 0 8px;
+	.headerbar__heading {
+		margin: 0;
 	}
 
-	.add-button {
-		margin: -12px 0 0 auto !important;
+	.federation-control {
+		margin: 0;
+	}
+
+	.button-vue  {
+		margin: 0 !important;
+		margin-inline-start: auto !important;
 	}
 </style>

@@ -1,10 +1,9 @@
 /* global OC, result, _ */
 
 /**
- * Copyright (c) 2016, Christoph Wurst <christoph@owncloud.com>
- *
- * This file is licensed under the Affero General Public License version 3 or later.
- * See the COPYING-README file.
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 (function(_, $, OC) {
@@ -15,7 +14,10 @@
 	 * @constructs FederationScopeMenu
 	 * @memberof OC.Settings
 	 * @param {object} options
-	 * @param {bool} [options.lookupServerUploadEnabled=false] whether uploading to the lookup server is enabled
+	 * @param {boolean} [options.showFederatedScope=false] whether show the
+	 *        "v2-federated" scope or not
+	 * @param {boolean} [options.showPublishedScope=false] whether show the
+	 *        "v2-published" scope or not
 	 */
 	var FederationSettingsView = OC.Backbone.View.extend({
 		_inputFields: undefined,
@@ -31,7 +33,8 @@
 			} else {
 				this._config = new OC.Settings.UserSettings();
 			}
-			this.showFederationScopes = !!options.showFederationScopes;
+			this.showFederatedScope = !!options.showFederatedScope;
+			this.showPublishedScope = !!options.showPublishedScope;
 
 			this._inputFields = [
 				'displayname',
@@ -78,15 +81,18 @@
 			];
 
 			_.each(this._inputFields, function(field) {
-				var $icon = self.$('#' + field + 'form h3 > .federation-menu');
+				var $icon = self.$('#' + field + 'form .headerbar-label > .federation-menu');
 				var excludedScopes = []
 
 				if (fieldsWithV2Private.indexOf(field) === -1) {
 					excludedScopes.push('v2-private');
 				}
 
-				if (!self.showFederationScopes) {
+				if (!self.showFederatedScope) {
 					excludedScopes.push('v2-federated');
+				}
+
+				if (!self.showPublishedScope) {
 					excludedScopes.push('v2-published');
 				}
 
@@ -99,6 +105,7 @@
 					self._onScopeChanged(field, scope);
 				});
 				$icon.append(scopeMenu.$el);
+				$icon.attr('aria-expanded', 'false');
 				$icon.on('click', _.bind(scopeMenu.show, scopeMenu));
 				$icon.on('keydown', function(e) {
 					if (e.keyCode === 32) {
@@ -121,7 +128,12 @@
 			_.each(this._inputFields, function(field) {
 				if (
 					field === 'avatar' ||
-					field === 'email'
+					field === 'email' ||
+					field === 'displayname' ||
+					field === 'twitter' ||
+					field === 'address' ||
+					field === 'website' ||
+					field === 'phone'
 				) {
 					return;
 				}
@@ -232,7 +244,7 @@
 		},
 
 		_setFieldScopeIcon: function(field, scope) {
-			var $icon = this.$('#' + field + 'form > h3 .icon-federation-menu');
+			var $icon = this.$('#' + field + 'form > .headerbar-label .icon-federation-menu');
 
 			$icon.removeClass('icon-phone');
 			$icon.removeClass('icon-password');

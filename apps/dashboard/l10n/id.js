@@ -3,11 +3,9 @@ OC.L10N.register(
     {
     "Dashboard" : "Dasbor",
     "Dashboard app" : "Aplikasi dasbor",
-    "Show something" : "Tunjukkan sesuatu",
     "Customize" : "Sesuaikan",
     "Edit widgets" : "Edit widget",
     "Get more widgets from the App Store" : "Dapatkan lebih banyak widget dari App Store",
-    "Change background image" : "Ubah gambar latar belakang",
     "Weather service" : "Layanan cuaca",
     "For your privacy, the weather data is requested by your Nextcloud server on your behalf so the weather service receives no personal information." : "Untuk privasi Anda, data cuaca diminta oleh server Nextcloud Anda atas nama Anda sehingga layanan cuaca tidak menerima informasi pribadi.",
     "Weather data from Met.no" : "Data cuaca dari Met.no",
@@ -22,14 +20,6 @@ OC.L10N.register(
     "Good evening" : "Selamat malam",
     "Good evening, {name}" : "Selamat malam, {name}",
     "Hello" : "Halo",
-    "Hello, {name}" : "Halo, {name}",
-    "Pick from Files" : "Pilih dari File",
-    "Default images" : "Gambar bawaan",
-    "Plain background" : "Latar belakang polos",
-    "Insert from {productName}" : "Sisipkan dari {productName}",
-    "Get more widgets from the app store" : "Dapatkan lebih banyak widget dari app store",
-    "Good night, {name}" : "Selamat malam, {name}",
-    "Good night" : "Selamat malam",
-    "Pick from files" : "Pilih dari file"
+    "Hello, {name}" : "Halo, {name}"
 },
 "nplurals=1; plural=0;");

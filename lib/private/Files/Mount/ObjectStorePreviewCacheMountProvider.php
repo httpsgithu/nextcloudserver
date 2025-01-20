@@ -3,25 +3,8 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2020, Morris Jobke <hey@morrisjobke.de>
- *
- * @author Morris Jobke <hey@morrisjobke.de>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2020 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 namespace OC\Files\Mount;
 
@@ -31,18 +14,17 @@ use OC\Files\Storage\Wrapper\Jail;
 use OCP\Files\Config\IRootMountProvider;
 use OCP\Files\Storage\IStorageFactory;
 use OCP\IConfig;
-use OCP\ILogger;
+use Psr\Log\LoggerInterface;
 
 /**
  * Mount provider for object store app data folder for previews
  */
 class ObjectStorePreviewCacheMountProvider implements IRootMountProvider {
-	/** @var ILogger */
-	private $logger;
+	private LoggerInterface $logger;
 	/** @var IConfig */
 	private $config;
 
-	public function __construct(ILogger $logger, IConfig $config) {
+	public function __construct(LoggerInterface $logger, IConfig $config) {
 		$this->logger = $logger;
 		$this->config = $config;
 	}
@@ -69,7 +51,10 @@ class ObjectStorePreviewCacheMountProvider implements IRootMountProvider {
 					AppdataPreviewObjectStoreStorage::class,
 					'/appdata_' . $instanceId . '/preview/' . $parent . '/' . $child,
 					$this->getMultiBucketObjectStore($i),
-					$loader
+					$loader,
+					null,
+					null,
+					self::class
 				);
 				$i++;
 			}
@@ -87,7 +72,10 @@ class ObjectStorePreviewCacheMountProvider implements IRootMountProvider {
 			$fakeRootStorageJail,
 			'/appdata_' . $instanceId . '/preview/old-multibucket',
 			null,
-			$loader
+			$loader,
+			null,
+			null,
+			self::class
 		);
 
 		return $mountPoints;

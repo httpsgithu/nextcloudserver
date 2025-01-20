@@ -1,30 +1,12 @@
 <!--
-	- @copyright 2021, Christopher Ng <chrng8@gmail.com>
-	-
-	- @author Christopher Ng <chrng8@gmail.com>
-	-
-	- @license GNU AGPL version 3 or any later version
-	-
-	- This program is free software: you can redistribute it and/or modify
-	- it under the terms of the GNU Affero General Public License as
-	- published by the Free Software Foundation, either version 3 of the
-	- License, or (at your option) any later version.
-	-
-	- This program is distributed in the hope that it will be useful,
-	- but WITHOUT ANY WARRANTY; without even the implied warranty of
-	- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-	- GNU Affero General Public License for more details.
-	-
-	- You should have received a copy of the GNU Affero General Public License
-	- along with this program. If not, see <http://www.gnu.org/licenses/>.
+  - SPDX-FileCopyrightText: 2021 Nextcloud GmbH and Nextcloud contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 
 <template>
-	<section>
-		<HeaderBar
-			:account-property="accountProperty"
-			label-for="email"
-			:handle-scope-change="savePrimaryEmailScope"
+	<section class="section-emails">
+		<HeaderBar :input-id="inputId"
+			:readable="primaryEmail.readable"
 			:is-editable="true"
 			:is-multi-value-supported="true"
 			:is-valid-section="isValidSection"
@@ -32,7 +14,7 @@
 			@add-additional="onAddAdditionalEmail" />
 
 		<template v-if="displayNameChangeSupported">
-			<Email
+			<Email :input-id="inputId"
 				:primary="true"
 				:scope.sync="primaryEmail.scope"
 				:email.sync="primaryEmail.value"
@@ -40,34 +22,40 @@
 				@update:email="onUpdateEmail"
 				@update:notification-email="onUpdateNotificationEmail" />
 		</template>
+
 		<span v-else>
 			{{ primaryEmail.value || t('settings', 'No email address set') }}
 		</span>
-		<Email v-for="(additionalEmail, index) in additionalEmails"
-			:key="index"
-			:index="index"
-			:scope.sync="additionalEmail.scope"
-			:email.sync="additionalEmail.value"
-			:local-verification-state="parseInt(additionalEmail.locallyVerified, 10)"
-			:active-notification-email.sync="notificationEmail"
-			@update:email="onUpdateEmail"
-			@update:notification-email="onUpdateNotificationEmail"
-			@delete-additional-email="onDeleteAdditionalEmail(index)" />
+
+		<template v-if="additionalEmails.length">
+			<!-- TODO use unique key for additional email when uniqueness can be guaranteed, see https://github.com/nextcloud/server/issues/26866 -->
+			<Email v-for="(additionalEmail, index) in additionalEmails"
+				:key="additionalEmail.key"
+				class="section-emails__additional-email"
+				:index="index"
+				:scope.sync="additionalEmail.scope"
+				:email.sync="additionalEmail.value"
+				:local-verification-state="parseInt(additionalEmail.locallyVerified, 10)"
+				:active-notification-email.sync="notificationEmail"
+				@update:email="onUpdateEmail"
+				@update:notification-email="onUpdateNotificationEmail"
+				@delete-additional-email="onDeleteAdditionalEmail(index)" />
+		</template>
 	</section>
 </template>
 
 <script>
 import { loadState } from '@nextcloud/initial-state'
-import { showError } from '@nextcloud/dialogs'
 
-import Email from './Email'
-import HeaderBar from '../shared/HeaderBar'
+import Email from './Email.vue'
+import HeaderBar from '../shared/HeaderBar.vue'
 
-import { ACCOUNT_PROPERTY_READABLE_ENUM, DEFAULT_ADDITIONAL_EMAIL_SCOPE } from '../../../constants/AccountPropertyConstants'
-import { savePrimaryEmail, savePrimaryEmailScope, removeAdditionalEmail } from '../../../service/PersonalInfo/EmailService'
-import { validateEmail } from '../../../utils/validate'
+import { ACCOUNT_PROPERTY_READABLE_ENUM, DEFAULT_ADDITIONAL_EMAIL_SCOPE, NAME_READABLE_ENUM } from '../../../constants/AccountPropertyConstants.js'
+import { savePrimaryEmail, removeAdditionalEmail } from '../../../service/PersonalInfo/EmailService.js'
+import { validateEmail } from '../../../utils/validate.js'
+import { handleError } from '../../../utils/handlers.ts'
 
-const { emails: { additionalEmails, primaryEmail, notificationEmail } } = loadState('settings', 'personalInfoParameters', {})
+const { emailMap: { additionalEmails, primaryEmail, notificationEmail } } = loadState('settings', 'personalInfoParameters', {})
 const { displayNameChangeSupported } = loadState('settings', 'accountParameters', {})
 
 export default {
@@ -81,10 +69,9 @@ export default {
 	data() {
 		return {
 			accountProperty: ACCOUNT_PROPERTY_READABLE_ENUM.EMAIL,
-			additionalEmails,
+			additionalEmails: additionalEmails.map(properties => ({ ...properties, key: this.generateUniqueKey() })),
 			displayNameChangeSupported,
-			primaryEmail,
-			savePrimaryEmailScope,
+			primaryEmail: { ...primaryEmail, readable: NAME_READABLE_ENUM[primaryEmail.name] },
 			notificationEmail,
 		}
 	},
@@ -95,6 +82,10 @@ export default {
 				return this.additionalEmails[0].value
 			}
 			return null
+		},
+
+		inputId() {
+			return `account-property-${this.primaryEmail.name}`
 		},
 
 		isValidSection() {
@@ -115,7 +106,7 @@ export default {
 	methods: {
 		onAddAdditionalEmail() {
 			if (this.isValidSection) {
-				this.additionalEmails.push({ value: '', scope: DEFAULT_ADDITIONAL_EMAIL_SCOPE })
+				this.additionalEmails.push({ value: '', scope: DEFAULT_ADDITIONAL_EMAIL_SCOPE, key: this.generateUniqueKey() })
 			}
 		},
 
@@ -141,7 +132,11 @@ export default {
 				const responseData = await savePrimaryEmail(this.primaryEmailValue)
 				this.handleResponse(responseData.ocs?.meta?.status)
 			} catch (e) {
-				this.handleResponse('error', 'Unable to update primary email address', e)
+				this.handleResponse(
+					'error',
+					t('settings', 'Unable to update primary email address'),
+					e,
+				)
 			}
 		},
 
@@ -150,7 +145,11 @@ export default {
 				const responseData = await removeAdditionalEmail(this.firstAdditionalEmail)
 				this.handleDeleteFirstAdditionalEmail(responseData.ocs?.meta?.status)
 			} catch (e) {
-				this.handleResponse('error', 'Unable to delete additional email address', e)
+				this.handleResponse(
+					'error',
+					t('settings', 'Unable to delete additional email address'),
+					e,
+				)
 			}
 		},
 
@@ -158,26 +157,33 @@ export default {
 			if (status === 'ok') {
 				this.$delete(this.additionalEmails, 0)
 			} else {
-				this.handleResponse('error', 'Unable to delete additional email address', {})
+				this.handleResponse(
+					'error',
+					t('settings', 'Unable to delete additional email address'),
+					{},
+				)
 			}
 		},
 
 		handleResponse(status, errorMessage, error) {
 			if (status !== 'ok') {
-				showError(t('settings', errorMessage))
-				this.logger.error(errorMessage, error)
+				handleError(error, errorMessage)
 			}
+		},
+
+		generateUniqueKey() {
+			return Math.random().toString(36).substring(2)
 		},
 	},
 }
 </script>
 
 <style lang="scss" scoped>
-section {
+.section-emails {
 	padding: 10px 10px;
 
-	&::v-deep button:disabled {
-		cursor: default;
+	&__additional-email {
+		margin-top: calc(var(--default-grid-baseline) * 3);
 	}
 }
 </style>

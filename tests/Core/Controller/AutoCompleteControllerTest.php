@@ -1,24 +1,7 @@
 <?php
 /**
- * @copyright Copyright (c) 2017 Arthur Schiwon <blizzz@arthur-schiwon.de>
- *
- * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2017 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace Tests\Core\Controller;
@@ -32,13 +15,13 @@ use PHPUnit\Framework\MockObject\MockObject;
 use Test\TestCase;
 
 class AutoCompleteControllerTest extends TestCase {
-	/** @var  ISearch|MockObject */
+	/** @var ISearch|MockObject */
 	protected $collaboratorSearch;
-	/** @var  IManager|MockObject */
+	/** @var IManager|MockObject */
 	protected $autoCompleteManager;
-	/** @var  IEventDispatcher|MockObject */
+	/** @var IEventDispatcher|MockObject */
 	protected $dispatcher;
-	/** @var  AutoCompleteController */
+	/** @var AutoCompleteController */
 	protected $controller;
 
 	protected function setUp(): void {
@@ -75,8 +58,8 @@ class AutoCompleteControllerTest extends TestCase {
 				],
 				// expected
 				[
-					[ 'id' => 'alice', 'label' => 'Alice A.', 'icon' => '', 'source' => 'users', 'status' => '', 'subline' => ''],
-					[ 'id' => 'bob', 'label' => 'Bob Y.', 'icon' => '', 'source' => 'users', 'status' => '', 'subline' => ''],
+					[ 'id' => 'alice', 'label' => 'Alice A.', 'icon' => '', 'source' => 'users', 'status' => '', 'subline' => '', 'shareWithDisplayNameUnique' => ''],
+					[ 'id' => 'bob', 'label' => 'Bob Y.', 'icon' => '', 'source' => 'users', 'status' => '', 'subline' => '', 'shareWithDisplayNameUnique' => ''],
 				],
 				'',
 				'files',
@@ -96,8 +79,8 @@ class AutoCompleteControllerTest extends TestCase {
 				],
 				// expected
 				[
-					[ 'id' => 'alice', 'label' => 'Alice A.', 'icon' => '', 'source' => 'users', 'status' => '', 'subline' => ''],
-					[ 'id' => 'bob', 'label' => 'Bob Y.', 'icon' => '', 'source' => 'users', 'status' => '', 'subline' => ''],
+					[ 'id' => 'alice', 'label' => 'Alice A.', 'icon' => '', 'source' => 'users', 'status' => '', 'subline' => '', 'shareWithDisplayNameUnique' => ''],
+					[ 'id' => 'bob', 'label' => 'Bob Y.', 'icon' => '', 'source' => 'users', 'status' => '', 'subline' => '', 'shareWithDisplayNameUnique' => ''],
 				],
 				'',
 				null,
@@ -117,8 +100,8 @@ class AutoCompleteControllerTest extends TestCase {
 				],
 				// expected
 				[
-					[ 'id' => 'alice', 'label' => 'Alice A.', 'icon' => '', 'source' => 'users', 'status' => '', 'subline' => ''],
-					[ 'id' => 'bob', 'label' => 'Bob Y.', 'icon' => '', 'source' => 'users', 'status' => '', 'subline' => ''],
+					[ 'id' => 'alice', 'label' => 'Alice A.', 'icon' => '', 'source' => 'users', 'status' => '', 'subline' => '', 'shareWithDisplayNameUnique' => ''],
+					[ 'id' => 'bob', 'label' => 'Bob Y.', 'icon' => '', 'source' => 'users', 'status' => '', 'subline' => '', 'shareWithDisplayNameUnique' => ''],
 				],
 				'',
 				'files',
@@ -138,27 +121,42 @@ class AutoCompleteControllerTest extends TestCase {
 					],
 				],
 				[
-					[ 'id' => 'bob', 'label' => 'Bob Y.', 'icon' => '', 'source' => 'users', 'status' => '', 'subline' => ''],
-					[ 'id' => 'bobby', 'label' => 'Robert R.', 'icon' => '', 'source' => 'users', 'status' => '', 'subline' => ''],
+					[ 'id' => 'bob', 'label' => 'Bob Y.', 'icon' => '', 'source' => 'users', 'status' => '', 'subline' => '', 'shareWithDisplayNameUnique' => ''],
+					[ 'id' => 'bobby', 'label' => 'Robert R.', 'icon' => '', 'source' => 'users', 'status' => '', 'subline' => '', 'shareWithDisplayNameUnique' => ''],
 				],
 				'bob',
 				'files',
 				'42',
 				null
-			]
+			],
+			[ #4 – with unique name
+				[
+					'exact' => [
+						'users' => [],
+						'robots' => [],
+					],
+					'users' => [
+						['label' => 'Alice A.', 'value' => ['shareWith' => 'alice'], 'shareWithDisplayNameUnique' => 'alica@nextcloud.com'],
+						['label' => 'Alice A.', 'value' => ['shareWith' => 'alicea'], 'shareWithDisplayNameUnique' => 'alicaa@nextcloud.com'],
+					],
+				],
+				// expected
+				[
+					[ 'id' => 'alice', 'label' => 'Alice A.', 'icon' => '', 'source' => 'users', 'status' => '', 'subline' => '', 'shareWithDisplayNameUnique' => 'alica@nextcloud.com'],
+					[ 'id' => 'alicea', 'label' => 'Alice A.', 'icon' => '', 'source' => 'users', 'status' => '', 'subline' => '', 'shareWithDisplayNameUnique' => 'alicaa@nextcloud.com'],
+				],
+				'',
+				'files',
+				'42',
+				'karma|bus-factor'
+			],
 		];
 	}
 
 	/**
-	 * @param $searchResults
-	 * @param $expected
-	 * @param $searchTerm
-	 * @param $itemType
-	 * @param $itemId
-	 * @param $sorter
 	 * @dataProvider searchDataProvider
 	 */
-	public function testGet($searchResults, $expected, $searchTerm, $itemType, $itemId, $sorter) {
+	public function testGet(array $searchResults, array $expected, string $searchTerm, ?string $itemType, ?string $itemId, ?string $sorter): void {
 		$this->collaboratorSearch->expects($this->once())
 			->method('search')
 			->willReturn([$searchResults, false]);

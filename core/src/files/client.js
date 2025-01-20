@@ -1,33 +1,7 @@
 /**
- * Copyright (c) 2015
- *
- * @author Bjoern Schiessle <bjoern@schiessle.org>
- * @author John Molakvoæ <skjnldsv@protonmail.com>
- * @author Julius Härtl <jus@bitgrid.net>
- * @author Lukas Reschke <lukas@statuscode.ch>
- * @author Michael Jobst <mjobst+github@tecratech.de>
- * @author Robin Appelman <robin@icewind.nl>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Thomas Citharel <nextcloud@tcit.fr>
- * @author Tomasz Grobelny <tomasz@grobelny.net>
- * @author Vincent Petry <vincent@nextcloud.com>
- * @author Vinicius Cubas Brand <vinicius@eita.org.br>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 /* eslint-disable */
@@ -42,7 +16,7 @@ import escapeHTML from 'escape-html'
 	 *
 	 * @param {Object} options
 	 * @param {String} options.host host name
-	 * @param {int} [options.port] port
+	 * @param {number} [options.port] port
 	 * @param {boolean} [options.useHTTPS] whether to use https
 	 * @param {String} [options.root] root path
 	 * @param {String} [options.userName] user name
@@ -104,6 +78,7 @@ import escapeHTML from 'escape-html'
 	Client.PROPERTY_GETCONTENTLENGTH	= '{' + Client.NS_DAV + '}getcontentlength'
 	Client.PROPERTY_ISENCRYPTED	= '{' + Client.NS_DAV + '}is-encrypted'
 	Client.PROPERTY_SHARE_PERMISSIONS	= '{' + Client.NS_OCS + '}share-permissions'
+	Client.PROPERTY_SHARE_ATTRIBUTES	= '{' + Client.NS_NEXTCLOUD + '}share-attributes'
 	Client.PROPERTY_QUOTA_AVAILABLE_BYTES	= '{' + Client.NS_DAV + '}quota-available-bytes'
 
 	Client.PROTOCOL_HTTP	= 'http'
@@ -160,6 +135,10 @@ import escapeHTML from 'escape-html'
 		 * Share permissions
 		 */
 		[Client.NS_OCS, 'share-permissions'],
+		/**
+		 * Share attributes
+		 */
+		[Client.NS_NEXTCLOUD, 'share-attributes'],
 	]
 
 	/**
@@ -416,6 +395,18 @@ import escapeHTML from 'escape-html'
 				data.sharePermissions = parseInt(sharePermissionsProp)
 			}
 
+			const shareAttributesProp = props[Client.PROPERTY_SHARE_ATTRIBUTES]
+			if (!_.isUndefined(shareAttributesProp)) {
+				try {
+					data.shareAttributes = JSON.parse(shareAttributesProp)
+				} catch (e) {
+					console.warn('Could not parse share attributes returned by server: "' + shareAttributesProp + '"')
+					data.shareAttributes = [];
+				}
+			} else {
+				data.shareAttributes = [];
+			}
+
 			const mounTypeProp = props['{' + Client.NS_NEXTCLOUD + '}mount-type']
 			if (!_.isUndefined(mounTypeProp)) {
 				data.mountType = mounTypeProp
@@ -449,7 +440,7 @@ import escapeHTML from 'escape-html'
 		/**
 		 * Returns whether the given status code means success
 		 *
-		 * @param {int} status status code
+		 * @param {number} status status code
 		 *
 		 * @returns true if status code is between 200 and 299 included
 		 */
@@ -546,7 +537,7 @@ import escapeHTML from 'escape-html'
 		 *
 		 * @param {Object} filter filter criteria
 		 * @param {Object} [filter.systemTagIds] list of system tag ids to filter by
-		 * @param {bool} [filter.favorite] set it to filter by favorites
+		 * @param {boolean} [filter.favorite] set it to filter by favorites
 		 * @param {Object} [options] options
 		 * @param {Array} [options.properties] list of Webdav properties to retrieve
 		 *
@@ -698,7 +689,7 @@ import escapeHTML from 'escape-html'
 		 * @param {String} body file body
 		 * @param {Object} [options]
 		 * @param {String} [options.contentType='text/plain'] content type
-		 * @param {bool} [options.overwrite=true] whether to overwrite an existing file
+		 * @param {boolean} [options.overwrite=true] whether to overwrite an existing file
 		 *
 		 * @returns {Promise}
 		 */
@@ -741,7 +732,7 @@ import escapeHTML from 'escape-html'
 			return promise
 		},
 
-		_simpleCall: function(method, path) {
+		_simpleCall: function(method, path, headers) {
 			if (!path) {
 				throw 'Missing argument "path"'
 			}
@@ -752,7 +743,8 @@ import escapeHTML from 'escape-html'
 
 			this._client.request(
 				method,
-				this._buildUrl(path)
+				this._buildUrl(path),
+				headers ? headers : {}
 			).then(
 				function(result) {
 					if (self._isSuccessStatus(result.status)) {
@@ -773,8 +765,8 @@ import escapeHTML from 'escape-html'
 		 *
 		 * @returns {Promise}
 		 */
-		createDirectory: function(path) {
-			return this._simpleCall('MKCOL', path)
+		createDirectory: function(path, headers) {
+			return this._simpleCall('MKCOL', path, headers)
 		},
 
 		/**

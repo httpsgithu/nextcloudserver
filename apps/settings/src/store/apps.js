@@ -1,49 +1,38 @@
 /**
- * @copyright Copyright (c) 2018 Julius Härtl <jus@bitgrid.net>
- *
- * @author John Molakvoæ <skjnldsv@protonmail.com>
- * @author Julius Härtl <jus@bitgrid.net>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2018 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-import api from './api'
+import api from './api.js'
 import Vue from 'vue'
 import { generateUrl } from '@nextcloud/router'
+import { showError, showInfo } from '@nextcloud/dialogs'
+import { loadState } from '@nextcloud/initial-state'
 
 const state = {
 	apps: [],
+	bundles: loadState('settings', 'appstoreBundles', []),
 	categories: [],
-	updateCount: 0,
+	updateCount: loadState('settings', 'appstoreUpdateCount', 0),
 	loading: {},
-	loadingList: false,
+	gettingCategoriesPromise: null,
+	appApiEnabled: loadState('settings', 'appApiEnabled', false),
 }
 
 const mutations = {
 
 	APPS_API_FAILURE(state, error) {
-		OC.Notification.showHtml(t('settings', 'An error occured during the request. Unable to proceed.') + '<br>' + error.error.response.data.data.message, { timeout: 7 })
+		showError(t('settings', 'An error occurred during the request. Unable to proceed.') + '<br>' + error.error.response.data.data.message, { isHTML: true })
 		console.error(state, error)
 	},
 
 	initCategories(state, { categories, updateCount }) {
 		state.categories = categories
 		state.updateCount = updateCount
+	},
+
+	updateCategories(state, categoriesPromise) {
+		state.gettingCategoriesPromise = categoriesPromise
 	},
 
 	setUpdateCount(state, updateCount) {
@@ -82,6 +71,16 @@ const mutations = {
 		const app = state.apps.find(app => app.id === appId)
 		app.active = true
 		app.groups = groups
+		if (app.id === 'app_api') {
+			state.appApiEnabled = true
+		}
+	},
+
+	setInstallState(state, { appId, canInstall }) {
+		const app = state.apps.find(app => app.id === appId)
+		if (app) {
+			app.canInstall = canInstall === true
+		}
 	},
 
 	disableApp(state, appId) {
@@ -90,6 +89,9 @@ const mutations = {
 		app.groups = []
 		if (app.removable) {
 			app.canUnInstall = true
+		}
+		if (app.id === 'app_api') {
+			state.appApiEnabled = false
 		}
 	},
 
@@ -100,6 +102,9 @@ const mutations = {
 		state.apps.find(app => app.id === appId).installed = false
 		state.apps.find(app => app.id === appId).canUnInstall = false
 		state.apps.find(app => app.id === appId).canInstall = true
+		if (appId === 'app_api') {
+			state.appApiEnabled = false
+		}
 	},
 
 	updateApp(state, appId) {
@@ -140,6 +145,9 @@ const mutations = {
 }
 
 const getters = {
+	isAppApiEnabled(state) {
+		return state.appApiEnabled
+	},
 	loading(state) {
 		return function(id) {
 			return state.loading[id]
@@ -151,8 +159,14 @@ const getters = {
 	getAllApps(state) {
 		return state.apps
 	},
+	getAppBundles(state) {
+		return state.bundles
+	},
 	getUpdateCount(state) {
 		return state.updateCount
+	},
+	getCategoryById: (state) => (selectedCategoryId) => {
+		return state.categories.find((category) => category.id === selectedCategoryId)
 	},
 }
 
@@ -177,19 +191,19 @@ const actions = {
 					})
 
 					// check for server health
-					return api.get(generateUrl('apps/files'))
+					return api.get(generateUrl('apps/files/'))
 						.then(() => {
 							if (response.data.update_required) {
-								OC.dialogs.info(
+								showInfo(
 									t(
 										'settings',
-										'The app has been enabled but needs to be updated. You will be redirected to the update page in 5 seconds.'
+										'The app has been enabled but needs to be updated. You will be redirected to the update page in 5 seconds.',
 									),
-									t('settings', 'App update'),
-									function() {
-										window.location.reload()
+									{
+										onClick: () => window.location.reload(),
+										close: false,
+
 									},
-									true
 								)
 								setTimeout(function() {
 									location.reload()
@@ -198,10 +212,12 @@ const actions = {
 						})
 						.catch(() => {
 							if (!Array.isArray(appId)) {
+								showError(t('settings', 'Error: This app cannot be enabled because it makes the server unstable'))
 								context.commit('setError', {
 									appId: apps,
 									error: t('settings', 'Error: This app cannot be enabled because it makes the server unstable'),
 								})
+								context.dispatch('disableApp', { appId })
 							}
 						})
 				})
@@ -228,8 +244,7 @@ const actions = {
 			context.commit('startLoading', 'install')
 			return api.post(generateUrl('settings/apps/force'), { appId })
 				.then((response) => {
-					// TODO: find a cleaner solution
-					location.reload()
+					context.commit('setInstallState', { appId, canInstall: true })
 				})
 				.catch((error) => {
 					context.commit('stopLoading', apps)
@@ -239,6 +254,10 @@ const actions = {
 						error: error.response.data.data.message,
 					})
 					context.commit('APPS_API_FAILURE', { appId, error })
+				})
+				.finally(() => {
+					context.commit('stopLoading', apps)
+					context.commit('stopLoading', 'install')
 				})
 		}).catch((error) => context.commit('API_FAILURE', { appId, error }))
 	},
@@ -311,18 +330,25 @@ const actions = {
 			.catch((error) => context.commit('API_FAILURE', error))
 	},
 
-	getCategories(context) {
-		context.commit('startLoading', 'categories')
-		return api.get(generateUrl('settings/apps/categories'))
-			.then((response) => {
-				if (response.data.length > 0) {
-					context.commit('appendCategories', response.data)
+	async getCategories(context, { shouldRefetchCategories = false } = {}) {
+		if (shouldRefetchCategories || !context.state.gettingCategoriesPromise) {
+			context.commit('startLoading', 'categories')
+			try {
+				const categoriesPromise = api.get(generateUrl('settings/apps/categories'))
+				context.commit('updateCategories', categoriesPromise)
+				const categoriesPromiseResponse = await categoriesPromise
+				if (categoriesPromiseResponse.data.length > 0) {
+					context.commit('appendCategories', categoriesPromiseResponse.data)
 					context.commit('stopLoading', 'categories')
 					return true
 				}
+				context.commit('stopLoading', 'categories')
 				return false
-			})
-			.catch((error) => context.commit('API_FAILURE', error))
+			} catch (error) {
+				context.commit('API_FAILURE', error)
+			}
+		}
+		return context.state.gettingCategoriesPromise
 	},
 
 }

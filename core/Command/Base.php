@@ -1,27 +1,9 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Daniel Kesselberg <mail@danielkesselberg.de>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 namespace OC\Core\Command;
 
@@ -29,6 +11,7 @@ use OC\Core\Command\User\ListCommand;
 use Stecman\Component\Symfony\Console\BashCompletion\Completion\CompletionAwareInterface;
 use Stecman\Component\Symfony\Console\BashCompletion\CompletionContext;
 use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Helper\Table;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -38,13 +21,9 @@ class Base extends Command implements CompletionAwareInterface {
 	public const OUTPUT_FORMAT_JSON = 'json';
 	public const OUTPUT_FORMAT_JSON_PRETTY = 'json_pretty';
 
-	protected $defaultOutputFormat = self::OUTPUT_FORMAT_PLAIN;
-
-	/** @var boolean */
-	private $php_pcntl_signal = false;
-
-	/** @var boolean */
-	private $interrupted = false;
+	protected string $defaultOutputFormat = self::OUTPUT_FORMAT_PLAIN;
+	private bool $php_pcntl_signal = false;
+	private bool $interrupted = false;
 
 	protected function configure() {
 		$this
@@ -58,28 +37,24 @@ class Base extends Command implements CompletionAwareInterface {
 		;
 	}
 
-	/**
-	 * @param InputInterface $input
-	 * @param OutputInterface $output
-	 * @param array $items
-	 * @param string $prefix
-	 */
-	protected function writeArrayInOutputFormat(InputInterface $input, OutputInterface $output, $items, $prefix = '  - ') {
+	protected function writeArrayInOutputFormat(InputInterface $input, OutputInterface $output, iterable $items, string $prefix = '  - '): void {
 		switch ($input->getOption('output')) {
 			case self::OUTPUT_FORMAT_JSON:
+				$items = (is_array($items) ? $items : iterator_to_array($items));
 				$output->writeln(json_encode($items));
 				break;
 			case self::OUTPUT_FORMAT_JSON_PRETTY:
+				$items = (is_array($items) ? $items : iterator_to_array($items));
 				$output->writeln(json_encode($items, JSON_PRETTY_PRINT));
 				break;
 			default:
 				foreach ($items as $key => $item) {
-					if (is_array($item)) {
+					if (is_iterable($item)) {
 						$output->writeln($prefix . $key . ':');
 						$this->writeArrayInOutputFormat($input, $output, $item, '  ' . $prefix);
 						continue;
 					}
-					if (!is_int($key) || ListCommand::class === get_class($this)) {
+					if (!is_int($key) || get_class($this) === ListCommand::class) {
 						$value = $this->valueToString($item);
 						if (!is_null($value)) {
 							$output->writeln($prefix . $key . ': ' . $value);
@@ -94,9 +69,27 @@ class Base extends Command implements CompletionAwareInterface {
 		}
 	}
 
+	protected function writeTableInOutputFormat(InputInterface $input, OutputInterface $output, array $items): void {
+		switch ($input->getOption('output')) {
+			case self::OUTPUT_FORMAT_JSON:
+				$output->writeln(json_encode($items));
+				break;
+			case self::OUTPUT_FORMAT_JSON_PRETTY:
+				$output->writeln(json_encode($items, JSON_PRETTY_PRINT));
+				break;
+			default:
+				$table = new Table($output);
+				$table->setRows($items);
+				if (!empty($items) && is_string(array_key_first(reset($items)))) {
+					$table->setHeaders(array_keys(reset($items)));
+				}
+				$table->render();
+				break;
+		}
+	}
+
+
 	/**
-	 * @param InputInterface $input
-	 * @param OutputInterface $output
 	 * @param mixed $item
 	 */
 	protected function writeMixedInOutputFormat(InputInterface $input, OutputInterface $output, $item) {
@@ -118,7 +111,7 @@ class Base extends Command implements CompletionAwareInterface {
 		}
 	}
 
-	protected function valueToString($value, $returnNull = true) {
+	protected function valueToString($value, bool $returnNull = true): ?string {
 		if ($value === false) {
 			return 'false';
 		} elseif ($value === true) {
@@ -152,11 +145,11 @@ class Base extends Command implements CompletionAwareInterface {
 	 *
 	 * Gives a chance to the command to properly terminate what it's doing
 	 */
-	protected function cancelOperation() {
+	public function cancelOperation(): void {
 		$this->interrupted = true;
 	}
 
-	public function run(InputInterface $input, OutputInterface $output) {
+	public function run(InputInterface $input, OutputInterface $output): int {
 		// check if the php pcntl_signal functions are accessible
 		$this->php_pcntl_signal = function_exists('pcntl_signal');
 		if ($this->php_pcntl_signal) {

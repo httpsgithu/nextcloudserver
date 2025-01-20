@@ -1,4 +1,11 @@
-<div class="update" data-productname="<?php p($_['productName']) ?>" data-version="<?php p($_['version']) ?>">
+<?php
+/**
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2013-2015 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+?>
+<div class="guest-box update" data-productname="<?php p($_['productName']) ?>" data-version="<?php p($_['version']) ?>">
 	<div class="updateOverview">
 		<?php if ($_['isAppsOnlyUpgrade']) { ?>
 		<h2 class="title"><?php p($l->t('App update required')); ?></h2>
@@ -7,7 +14,7 @@
 			[$_['productName'], $_['version']])); ?></h2>
 		<?php } ?>
 		<?php if (!empty($_['appsToUpgrade'])) { ?>
-		<div class="infogroup">
+		<div class="text-left">
 			<span><?php p($l->t('The following apps will be updated:')); ?></span>
 			<ul class="content appList">
 				<?php foreach ($_['appsToUpgrade'] as $appInfo) { ?>
@@ -17,7 +24,7 @@
 		</div>
 		<?php } ?>
 		<?php if (!empty($_['incompatibleAppsList'])) { ?>
-		<div class="infogroup">
+		<div class="text-left">
 			<span><?php p($l->t('These incompatible apps will be disabled:')) ?></span>
 			<ul class="content appList">
 				<?php foreach ($_['incompatibleAppsList'] as $appInfo) { ?>
@@ -31,15 +38,13 @@
 			<?php p($l->t('The theme %s has been disabled.', [$_['oldTheme']])) ?>
 		</div>
 		<?php } ?>
-		<div class="infogroup bold">
+		<div class="text-left margin-top bold">
 			<?php p($l->t('Please make sure that the database, the config folder and the data folder have been backed up before proceeding.')) ?>
 		</div>
-		<input class="updateButton primary" type="button" value="<?php p($l->t('Start update')) ?>">
-		<div class="infogroup">
-			<em>
+		<input class="updateButton primary margin-top" type="button" value="<?php p($l->t('Start update')) ?>">
+		<div class="notecard warning">
 			<?php p($l->t('To avoid timeouts with larger installations, you can instead run the following command from your installation directory:')) ?>
 			<pre>./occ upgrade</pre>
-			</em>
 		</div>
 	</div>
 

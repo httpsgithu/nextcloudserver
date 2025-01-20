@@ -1,8 +1,7 @@
 <?php
 /**
- * Copyright (c) 2014 Robin Appelman <icewind@owncloud.com>
- * This file is licensed under the Licensed under the MIT license:
- * http://opensource.org/licenses/MIT
+ * SPDX-FileCopyrightText: 2014 Robin Appelman <robin@icewind.nl>
+ * SPDX-License-Identifier: MIT
  */
 
 namespace Icewind\SMB\Native;
@@ -267,14 +266,14 @@ class NativeShare extends AbstractShare {
 	 * Open a writeable stream to a remote file
 	 * Note: This method will truncate the file to 0bytes first
 	 *
-	 * @param string $source
+	 * @param string $target
 	 * @return resource a writeable stream
 	 *
 	 * @throws NotFoundException
 	 * @throws InvalidTypeException
 	 */
-	public function write(string $source) {
-		$url = $this->buildUrl($source);
+	public function write(string $target) {
+		$url = $this->buildUrl($target);
 		$handle = $this->getState()->create($url);
 		return NativeWriteStream::wrap($this->getState(), $handle, 'w', $url);
 	}
@@ -282,14 +281,14 @@ class NativeShare extends AbstractShare {
 	/**
 	 * Open a writeable stream and set the cursor to the end of the stream
 	 *
-	 * @param string $source
+	 * @param string $target
 	 * @return resource a writeable stream
 	 *
 	 * @throws NotFoundException
 	 * @throws InvalidTypeException
 	 */
-	public function append(string $source) {
-		$url = $this->buildUrl($source);
+	public function append(string $target) {
+		$url = $this->buildUrl($target);
 		$handle = $this->getState()->open($url, "a+");
 		return NativeWriteStream::wrap($this->getState(), $handle, "a", $url);
 	}

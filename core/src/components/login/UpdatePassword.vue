@@ -1,24 +1,7 @@
 <!--
-  - @copyright Copyright (c) 2019 Julius Härtl <jus@bitgrid.net>
-  -
-  - @author Julius Härtl <jus@bitgrid.net>
-  -
-  - @license GNU AGPL version 3 or any later version
-  -
-  - This program is free software: you can redistribute it and/or modify
-  - it under the terms of the GNU Affero General Public License as
-  - published by the Free Software Foundation, either version 3 of the
-  - License, or (at your option) any later version.
-  -
-  - This program is distributed in the hope that it will be useful,
-  - but WITHOUT ANY WARRANTY; without even the implied warranty of
-  - MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-  - GNU Affero General Public License for more details.
-  -
-  - You should have received a copy of the GNU Affero General Public License
-  - along with this program. If not, see <http://www.gnu.org/licenses/>.
-  -
-  -->
+  - SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
+-->
 
 <template>
 	<form @submit.prevent="submit">
@@ -29,6 +12,9 @@
 					v-model="password"
 					type="password"
 					name="password"
+					autocomplete="new-password"
+					autocapitalize="none"
+					spellcheck="false"
 					required
 					:placeholder="t('core', 'New password')">
 			</p>
@@ -46,18 +32,9 @@
 				</label>
 			</div>
 
-			<div id="submit-wrapper">
-				<input id="submit"
-					type="submit"
-					class="login primary"
-					title=""
-					:value="!loading ? t('core', 'Reset password') : t('core', 'Resetting password')">
-				<div class="submit-icon"
-					:class="{
-						'icon-loading-small': loading && invertedColors,
-						'icon-loading-small-dark': loading && !invertedColors
-					}" />
-			</div>
+			<LoginButton :loading="loading"
+				:value="t('core', 'Reset password')"
+				:value-loading="t('core', 'Resetting password')" />
 
 			<p v-if="error && message" :class="{warning: error}">
 				{{ message }}
@@ -68,9 +45,13 @@
 
 <script>
 import Axios from '@nextcloud/axios'
+import LoginButton from './LoginButton.vue'
 
 export default {
 	name: 'UpdatePassword',
+	components: {
+		LoginButton,
+	},
 	props: {
 		username: {
 			type: String,
@@ -79,10 +60,6 @@ export default {
 		resetPasswordTarget: {
 			type: String,
 			required: true,
-		},
-		invertedColors: {
-			type: Boolean,
-			default: false,
 		},
 	},
 	data() {

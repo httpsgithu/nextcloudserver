@@ -1,8 +1,7 @@
-
 /**
- * Copyright (c) 2015, Arthur Schiwon <blizzz@owncloud.com>
- * This file is licensed under the Affero General Public License version 3 or later.
- * See the COPYING-README file.
+ * SPDX-FileCopyrightText: 2017-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2015-2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 OCA = OCA || {};
@@ -29,7 +28,7 @@ OCA = OCA || {};
 		bjQuiButtonClass: 'ui-button',
 
 		/**
-		 * @property {bool} - indicates whether a filter mode toggle operation
+		 * @property {boolean} - indicates whether a filter mode toggle operation
 		 * is still in progress
 		 */
 		isToggling: false,
@@ -147,8 +146,8 @@ OCA = OCA || {};
 		/**
 		 * displays server error messages.
 		 *
-		 * @param view
-		 * @param payload
+		 * @param {any} view -
+		 * @param {any} payload -
 		 */
 		onServerError: function(view, payload) {
 			if (   !_.isUndefined(view.managedItems[payload.relatedKey])) {
@@ -456,7 +455,7 @@ OCA = OCA || {};
 		 * sets the filter mode initially and resets the "isToggling" marker.
 		 * This method is called after a save operation against the mode key.
 		 *
-		 * @param mode
+		 * @param {any} mode -
 		 */
 		setFilterModeOnce: function(mode) {
 			this.isToggling = false;

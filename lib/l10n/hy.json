@@ -1,11 +1,15 @@
 { "translations": {
+    "Unknown filetype" : "Անհայտ նիշքի տեսակ",
+    "Invalid image" : "Անվավեր նկար",
+    "Files" : "Ֆայլեր",
     "today" : "այսօր",
     "seconds ago" : "վրկ. առաջ",
-    "File name contains at least one invalid character" : "Ֆայլի անունը առնվազն մի անվավեր նիշ է պարունակում",
     "__language_name__" : "Հայերեն",
-    "Help" : "Օգնություն",
     "Settings" : "կարգավորումներ",
     "Log out" : "Դուրս գալ",
+    "Email" : "Էլ․փոստ",
+    "Address" : "Հասցե",
+    "About" : "էջի վերաբերյալ",
     "Sunday" : "Կիրակի",
     "Monday" : "Երկուշաբթի",
     "Tuesday" : "Երեքշաբթի",
@@ -50,6 +54,9 @@
     "Sep." : "Սեպ.",
     "Oct." : "Հոկ.",
     "Nov." : "Նոյ.",
-    "Dec." : "Դեկ."
+    "Dec." : "Դեկ.",
+    "Translate" : "Թարգմանել",
+    "File name contains at least one invalid character" : "Ֆայլի անունը առնվազն մի անվավեր նիշ է պարունակում",
+    "Help" : "Օգնություն"
 },"pluralForm" :"nplurals=2; plural=(n != 1);"
 }

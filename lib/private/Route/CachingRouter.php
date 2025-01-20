@@ -1,44 +1,35 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Lukas Reschke <lukas@statuscode.ch>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Robin Appelman <robin@icewind.nl>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 namespace OC\Route;
 
-use OCP\ILogger;
+use OCP\App\IAppManager;
+use OCP\Diagnostics\IEventLogger;
+use OCP\ICache;
+use OCP\ICacheFactory;
+use OCP\IConfig;
+use OCP\IRequest;
+use Psr\Container\ContainerInterface;
+use Psr\Log\LoggerInterface;
 
 class CachingRouter extends Router {
-	/**
-	 * @var \OCP\ICache
-	 */
-	protected $cache;
+	protected ICache $cache;
 
-	/**
-	 * @param \OCP\ICache $cache
-	 * @param ILogger $logger
-	 */
-	public function __construct($cache, ILogger $logger) {
-		$this->cache = $cache;
-		parent::__construct($logger);
+	public function __construct(
+		ICacheFactory $cacheFactory,
+		LoggerInterface $logger,
+		IRequest $request,
+		IConfig $config,
+		IEventLogger $eventLogger,
+		ContainerInterface $container,
+		IAppManager $appManager,
+	) {
+		$this->cache = $cacheFactory->createLocal('route');
+		parent::__construct($logger, $request, $config, $eventLogger, $container, $appManager);
 	}
 
 	/**

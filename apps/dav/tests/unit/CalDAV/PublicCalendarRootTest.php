@@ -1,32 +1,7 @@
 <?php
 /**
- * @copyright Copyright (c) 2016 Thomas Citharel <nextcloud@tcit.fr>
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Georg Ehrke <oc.list@georgehrke.com>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Lukas Reschke <lukas@statuscode.ch>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Thomas Citharel <nextcloud@tcit.fr>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
- * @author Vinicius Cubas Brand <vinicius@eita.org.br>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2016 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 namespace OCA\DAV\Tests\unit\CalDAV;
 
@@ -39,10 +14,9 @@ use OCP\EventDispatcher\IEventDispatcher;
 use OCP\IConfig;
 use OCP\IGroupManager;
 use OCP\IL10N;
-use OCP\ILogger;
 use OCP\IUserManager;
 use OCP\Security\ISecureRandom;
-use Symfony\Component\EventDispatcher\EventDispatcherInterface;
+use Psr\Log\LoggerInterface;
 use Test\TestCase;
 
 /**
@@ -71,7 +45,7 @@ class PublicCalendarRootTest extends TestCase {
 
 	/** @var ISecureRandom */
 	private $random;
-	/** @var ILogger */
+	/** @var LoggerInterface */
 	private $logger;
 
 	protected function setUp(): void {
@@ -82,10 +56,10 @@ class PublicCalendarRootTest extends TestCase {
 		$this->userManager = $this->createMock(IUserManager::class);
 		$this->groupManager = $this->createMock(IGroupManager::class);
 		$this->random = \OC::$server->getSecureRandom();
-		$this->logger = $this->createMock(ILogger::class);
+		$this->logger = $this->createMock(LoggerInterface::class);
 		$dispatcher = $this->createMock(IEventDispatcher::class);
-		$legacyDispatcher = $this->createMock(EventDispatcherInterface::class);
 		$config = $this->createMock(IConfig::class);
+		$sharingBackend = $this->createMock(\OCA\DAV\CalDAV\Sharing\Backend::class);
 
 		$this->principal->expects($this->any())->method('getGroupMembership')
 			->withAnyParameters()
@@ -99,19 +73,19 @@ class PublicCalendarRootTest extends TestCase {
 			$db,
 			$this->principal,
 			$this->userManager,
-			$this->groupManager,
 			$this->random,
 			$this->logger,
 			$dispatcher,
-			$legacyDispatcher,
-			$config
+			$config,
+			$sharingBackend,
+			false,
 		);
 		$this->l10n = $this->getMockBuilder(IL10N::class)
 			->disableOriginalConstructor()->getMock();
 		$this->config = $this->createMock(IConfig::class);
 
 		$this->publicCalendarRoot = new PublicCalendarRoot($this->backend,
-			$this->l10n, $this->config);
+			$this->l10n, $this->config, $this->logger);
 	}
 
 	protected function tearDown(): void {
@@ -134,12 +108,12 @@ class PublicCalendarRootTest extends TestCase {
 		}
 	}
 
-	public function testGetName() {
+	public function testGetName(): void {
 		$name = $this->publicCalendarRoot->getName();
 		$this->assertEquals('public-calendars', $name);
 	}
 
-	public function testGetChild() {
+	public function testGetChild(): void {
 		$calendar = $this->createPublicCalendar();
 
 		$publicCalendars = $this->backend->getPublicCalendars();
@@ -152,7 +126,7 @@ class PublicCalendarRootTest extends TestCase {
 		$this->assertEquals($calendar, $calendarResult);
 	}
 
-	public function testGetChildren() {
+	public function testGetChildren(): void {
 		$this->createPublicCalendar();
 		$calendarResults = $this->publicCalendarRoot->getChildren();
 		$this->assertSame([], $calendarResults);
@@ -165,11 +139,11 @@ class PublicCalendarRootTest extends TestCase {
 		$this->backend->createCalendar(self::UNIT_TEST_USER, 'Example', []);
 
 		$calendarInfo = $this->backend->getCalendarsForUser(self::UNIT_TEST_USER)[0];
-		$calendar = new PublicCalendar($this->backend, $calendarInfo, $this->l10n, $this->config);
+		$calendar = new PublicCalendar($this->backend, $calendarInfo, $this->l10n, $this->config, $this->logger);
 		$publicUri = $calendar->setPublishStatus(true);
 
 		$calendarInfo = $this->backend->getPublicCalendar($publicUri);
-		$calendar = new PublicCalendar($this->backend, $calendarInfo, $this->l10n, $this->config);
+		$calendar = new PublicCalendar($this->backend, $calendarInfo, $this->l10n, $this->config, $this->logger);
 
 		return $calendar;
 	}

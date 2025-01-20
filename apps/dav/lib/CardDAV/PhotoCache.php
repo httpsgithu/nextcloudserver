@@ -1,31 +1,7 @@
 <?php
 /**
- * @copyright Copyright (c) 2016 Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Daniel Kesselberg <mail@danielkesselberg.de>
- * @author Jacob Neplokh <me@jacobneplokh.com>
- * @author Joas Schilling <coding@schilljs.com>
- * @author John Molakvoæ <skjnldsv@protonmail.com>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2016 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 namespace OCA\DAV\CardDAV;
 
@@ -34,7 +10,8 @@ use OCP\Files\NotFoundException;
 use OCP\Files\NotPermittedException;
 use OCP\Files\SimpleFS\ISimpleFile;
 use OCP\Files\SimpleFS\ISimpleFolder;
-use OCP\ILogger;
+use OCP\Image;
+use Psr\Log\LoggerInterface;
 use Sabre\CardDAV\Card;
 use Sabre\VObject\Document;
 use Sabre\VObject\Parameter;
@@ -43,41 +20,28 @@ use Sabre\VObject\Reader;
 
 class PhotoCache {
 
-	/** @var array  */
+	/** @var array */
 	public const ALLOWED_CONTENT_TYPES = [
 		'image/png' => 'png',
 		'image/jpeg' => 'jpg',
 		'image/gif' => 'gif',
 		'image/vnd.microsoft.icon' => 'ico',
+		'image/webp' => 'webp',
 	];
-
-	/** @var IAppData */
-	protected $appData;
-
-	/** @var ILogger */
-	protected $logger;
 
 	/**
 	 * PhotoCache constructor.
-	 *
-	 * @param IAppData $appData
-	 * @param ILogger $logger
 	 */
-	public function __construct(IAppData $appData, ILogger $logger) {
-		$this->appData = $appData;
-		$this->logger = $logger;
+	public function __construct(
+		protected IAppData $appData,
+		protected LoggerInterface $logger,
+	) {
 	}
 
 	/**
-	 * @param int $addressBookId
-	 * @param string $cardUri
-	 * @param int $size
-	 * @param Card $card
-	 *
-	 * @return ISimpleFile
 	 * @throws NotFoundException
 	 */
-	public function get($addressBookId, $cardUri, $size, Card $card) {
+	public function get(int $addressBookId, string $cardUri, int $size, Card $card): ISimpleFile {
 		$folder = $this->getFolder($addressBookId, $cardUri);
 
 		if ($this->isEmpty($folder)) {
@@ -95,17 +59,11 @@ class PhotoCache {
 		return $this->getFile($folder, $size);
 	}
 
-	/**
-	 * @param ISimpleFolder $folder
-	 * @return bool
-	 */
-	private function isEmpty(ISimpleFolder $folder) {
+	private function isEmpty(ISimpleFolder $folder): bool {
 		return $folder->getDirectoryListing() === [];
 	}
 
 	/**
-	 * @param ISimpleFolder $folder
-	 * @param Card $card
 	 * @throws NotPermittedException
 	 */
 	private function init(ISimpleFolder $folder, Card $card): void {
@@ -128,11 +86,14 @@ class PhotoCache {
 		$file->putContent($data['body']);
 	}
 
-	private function hasPhoto(ISimpleFolder $folder) {
+	private function hasPhoto(ISimpleFolder $folder): bool {
 		return !$folder->fileExists('nophoto');
 	}
 
-	private function getFile(ISimpleFolder $folder, $size) {
+	/**
+	 * @param float|-1 $size
+	 */
+	private function getFile(ISimpleFolder $folder, $size): ISimpleFile {
 		$ext = $this->getExtension($folder);
 
 		if ($size === -1) {
@@ -148,7 +109,7 @@ class PhotoCache {
 				throw new NotFoundException;
 			}
 
-			$photo = new \OC_Image();
+			$photo = new Image();
 			/** @var ISimpleFile $file */
 			$file = $folder->getFile('photo.' . $ext);
 			$photo->loadFromData($file->getContent());
@@ -158,7 +119,7 @@ class PhotoCache {
 				$ratio = 1 / $ratio;
 			}
 
-			$size = (int) ($size * $ratio);
+			$size = (int)($size * $ratio);
 			if ($size !== -1) {
 				$photo->resize($size);
 			}
@@ -193,8 +154,6 @@ class PhotoCache {
 	/**
 	 * Get the extension of the avatar. If there is no avatar throw Exception
 	 *
-	 * @param ISimpleFolder $folder
-	 * @return string
 	 * @throws NotFoundException
 	 */
 	private function getExtension(ISimpleFolder $folder): string {
@@ -209,23 +168,22 @@ class PhotoCache {
 
 	/**
 	 * @param Card $node
-	 * @return bool|array{body: string, Content-Type: string}
+	 * @return false|array{body: string, Content-Type: string}
 	 */
 	private function getPhoto(Card $node) {
 		try {
 			$vObject = $this->readCard($node->get());
 			return $this->getPhotoFromVObject($vObject);
 		} catch (\Exception $e) {
-			$this->logger->logException($e, [
-				'message' => 'Exception during vcard photo parsing'
+			$this->logger->error('Exception during vcard photo parsing', [
+				'exception' => $e
 			]);
 		}
 		return false;
 	}
 
 	/**
-	 * @param Document $vObject
-	 * @return bool|array{body: string, Content-Type: string}
+	 * @return false|array{body: string, Content-Type: string}
 	 */
 	public function getPhotoFromVObject(Document $vObject) {
 		try {
@@ -262,18 +220,14 @@ class PhotoCache {
 				'body' => $val
 			];
 		} catch (\Exception $e) {
-			$this->logger->logException($e, [
-				'message' => 'Exception during vcard photo parsing'
+			$this->logger->error('Exception during vcard photo parsing', [
+				'exception' => $e
 			]);
 		}
 		return false;
 	}
 
-	/**
-	 * @param string $cardData
-	 * @return \Sabre\VObject\Document
-	 */
-	private function readCard($cardData) {
+	private function readCard(string $cardData): Document {
 		return Reader::read($cardData);
 	}
 
@@ -286,9 +240,9 @@ class PhotoCache {
 		if (isset($params['TYPE']) || isset($params['MEDIATYPE'])) {
 			/** @var Parameter $typeParam */
 			$typeParam = isset($params['TYPE']) ? $params['TYPE'] : $params['MEDIATYPE'];
-			$type = $typeParam->getValue();
+			$type = (string)$typeParam->getValue();
 
-			if (strpos($type, 'image/') === 0) {
+			if (str_starts_with($type, 'image/')) {
 				return $type;
 			} else {
 				return 'image/' . strtolower($type);

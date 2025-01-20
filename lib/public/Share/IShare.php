@@ -1,30 +1,9 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Bjoern Schiessle <bjoern@schiessle.org>
- * @author Daniel Calviño Sánchez <danxuliu@gmail.com>
- * @author Joas Schilling <coding@schilljs.com>
- * @author John Molakvoæ <skjnldsv@protonmail.com>
- * @author Julius Härtl <jus@bitgrid.net>
- * @author Maxence Lange <maxence@nextcloud.com>
- * @author Robin Appelman <robin@icewind.nl>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 namespace OCP\Share;
 
@@ -36,12 +15,13 @@ use OCP\Files\NotFoundException;
 use OCP\Share\Exceptions\IllegalIDChangeException;
 
 /**
- * Interface IShare
+ * This interface allows to represent a share object.
+ *
+ * This interface must not be implemented in your application.
  *
  * @since 9.0.0
  */
 interface IShare {
-
 	/**
 	 * @since 17.0.0
 	 */
@@ -115,6 +95,11 @@ interface IShare {
 	 * @since 21.0.0
 	 */
 	public const TYPE_DECK_USER = 13;
+
+	/**
+	 * @since 26.0.0
+	 */
+	public const TYPE_SCIENCEMESH = 15;
 
 	/**
 	 * @since 18.0.0
@@ -207,7 +192,7 @@ interface IShare {
 	 * @since 9.0.0
 	 * @throws NotFoundException
 	 */
-	public function getNodeId();
+	public function getNodeId(): int;
 
 	/**
 	 * Set the type of node (file/folder)
@@ -300,7 +285,7 @@ interface IShare {
 	 * See \OCP\Constants::PERMISSION_*
 	 *
 	 * @param int $permissions
-	 * @return \OCP\Share\IShare The modified object
+	 * @return IShare The modified object
 	 * @since 9.0.0
 	 */
 	public function setPermissions($permissions);
@@ -313,6 +298,31 @@ interface IShare {
 	 * @since 9.0.0
 	 */
 	public function getPermissions();
+
+	/**
+	 * Create share attributes object
+	 *
+	 * @since 25.0.0
+	 * @return IAttributes
+	 */
+	public function newAttributes(): IAttributes;
+
+	/**
+	 * Set share attributes
+	 *
+	 * @param ?IAttributes $attributes
+	 * @since 25.0.0
+	 * @return IShare The modified object
+	 */
+	public function setAttributes(?IAttributes $attributes);
+
+	/**
+	 * Get share attributes
+	 *
+	 * @since 25.0.0
+	 * @return ?IAttributes
+	 */
+	public function getAttributes(): ?IAttributes;
 
 	/**
 	 * Set the accepted status
@@ -354,19 +364,37 @@ interface IShare {
 	/**
 	 * Set the expiration date
 	 *
-	 * @param null|\DateTime $expireDate
+	 * @param \DateTime|null $expireDate
 	 * @return \OCP\Share\IShare The modified object
 	 * @since 9.0.0
 	 */
-	public function setExpirationDate($expireDate);
+	public function setExpirationDate(?\DateTime $expireDate);
 
 	/**
 	 * Get the expiration date
 	 *
-	 * @return \DateTime
+	 * @return \DateTime|null
 	 * @since 9.0.0
 	 */
 	public function getExpirationDate();
+
+	/**
+	 * Set overwrite flag for falsy expiry date vavlues
+	 *
+	 * @param bool $noExpirationDate
+	 * @return \OCP\Share\IShare The modified object
+	 * @since 30.0.0
+	 */
+	public function setNoExpirationDate(bool $noExpirationDate);
+
+
+	/**
+	 * Get value of overwrite falsy expiry date flag
+	 *
+	 * @return bool
+	 * @since 30.0.0
+	 */
+	public function getNoExpirationDate();
 
 	/**
 	 * Is the share expired ?
@@ -443,11 +471,24 @@ interface IShare {
 	 * If this share is obtained via a shareprovider the password is
 	 * hashed.
 	 *
-	 * @return string
+	 * @return string|null
 	 * @since 9.0.0
 	 */
 	public function getPassword();
 
+	/**
+	 * Set the password's expiration time of this share.
+	 *
+	 * @return self The modified object
+	 * @since 24.0.0
+	 */
+	public function setPasswordExpirationTime(?\DateTimeInterface $passwordExpirationTime = null): IShare;
+
+	/**
+	 * Get the password's expiration time of this share.
+	 * @since 24.0.0
+	 */
+	public function getPasswordExpirationTime(): ?\DateTimeInterface;
 
 	/**
 	 * Set if the recipient can start a conversation with the owner to get the
@@ -523,7 +564,7 @@ interface IShare {
 	public function getShareTime();
 
 	/**
-	 * Set if the recipient is informed by mail about the share.
+	 * Set if the recipient should be informed by mail about the share.
 	 *
 	 * @param bool $mailSend
 	 * @return \OCP\Share\IShare The modified object
@@ -532,7 +573,7 @@ interface IShare {
 	public function setMailSend($mailSend);
 
 	/**
-	 * Get if the recipient informed by mail about the share.
+	 * Get if the recipient should be informed by mail about the share.
 	 *
 	 * @return bool
 	 * @since 9.0.0
@@ -543,6 +584,7 @@ interface IShare {
 	 * Set the cache entry for the shared node
 	 *
 	 * @param ICacheEntry $entry
+	 * @return void
 	 * @since 11.0.0
 	 */
 	public function setNodeCacheEntry(ICacheEntry $entry);
@@ -575,4 +617,20 @@ interface IShare {
 	 * @since 15.0.0
 	 */
 	public function getHideDownload(): bool;
+
+	/**
+	 * Sets a flag that stores whether a reminder via email has been sent
+	 *
+	 * @return self The modified object
+	 * @since 31.0.0
+	 */
+	public function setReminderSent(bool $reminderSent): IShare;
+
+	/**
+	 * Gets a flag that stores whether a reminder via email has been sent
+	 *
+	 * @return bool
+	 * @since 31.0.0
+	 */
+	public function getReminderSent(): bool;
 }

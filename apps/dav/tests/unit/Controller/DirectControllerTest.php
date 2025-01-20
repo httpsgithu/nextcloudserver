@@ -3,27 +3,8 @@
 declare(strict_types=1);
 
 /**
- * @copyright 2018, Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2018 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 namespace OCA\DAV\Tests\Unit\DAV\Controller;
 
@@ -34,11 +15,12 @@ use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\OCS\OCSBadRequestException;
 use OCP\AppFramework\OCS\OCSNotFoundException;
 use OCP\AppFramework\Utility\ITimeFactory;
+use OCP\EventDispatcher\IEventDispatcher;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
 use OCP\IRequest;
-use OCP\IURLGenerator;
+use OCP\IUrlGenerator;
 use OCP\Security\ISecureRandom;
 use Test\TestCase;
 
@@ -56,11 +38,13 @@ class DirectControllerTest extends TestCase {
 	/** @var ITimeFactory|\PHPUnit\Framework\MockObject\MockObject */
 	private $timeFactory;
 
-	/** @var IURLGenerator|\PHPUnit\Framework\MockObject\MockObject */
+	/** @var IUrlGenerator|\PHPUnit\Framework\MockObject\MockObject */
 	private $urlGenerator;
 
-	/** @var DirectController */
-	private $controller;
+	/** @var IEventDispatcher|\PHPUnit\Framework\MockObject\MockObject */
+	private $eventDispatcher;
+
+	private DirectController $controller;
 
 	protected function setUp(): void {
 		parent::setUp();
@@ -69,7 +53,8 @@ class DirectControllerTest extends TestCase {
 		$this->directMapper = $this->createMock(DirectMapper::class);
 		$this->random = $this->createMock(ISecureRandom::class);
 		$this->timeFactory = $this->createMock(ITimeFactory::class);
-		$this->urlGenerator = $this->createMock(IURLGenerator::class);
+		$this->urlGenerator = $this->createMock(IUrlGenerator::class);
+		$this->eventDispatcher = $this->createMock(IEventDispatcher::class);
 
 		$this->controller = new DirectController(
 			'dav',
@@ -79,11 +64,12 @@ class DirectControllerTest extends TestCase {
 			$this->directMapper,
 			$this->random,
 			$this->timeFactory,
-			$this->urlGenerator
+			$this->urlGenerator,
+			$this->eventDispatcher
 		);
 	}
 
-	public function testGetUrlNonExistingFileId() {
+	public function testGetUrlNonExistingFileId(): void {
 		$userFolder = $this->createMock(Folder::class);
 		$this->rootFolder->method('getUserFolder')
 			->with('awesomeUser')
@@ -97,7 +83,7 @@ class DirectControllerTest extends TestCase {
 		$this->controller->getUrl(101);
 	}
 
-	public function testGetUrlForFolder() {
+	public function testGetUrlForFolder(): void {
 		$userFolder = $this->createMock(Folder::class);
 		$this->rootFolder->method('getUserFolder')
 			->with('awesomeUser')
@@ -105,15 +91,15 @@ class DirectControllerTest extends TestCase {
 
 		$folder = $this->createMock(Folder::class);
 
-		$userFolder->method('getById')
+		$userFolder->method('getFirstNodeById')
 			->with(101)
-			->willReturn([$folder]);
+			->willReturn($folder);
 
 		$this->expectException(OCSBadRequestException::class);
 		$this->controller->getUrl(101);
 	}
 
-	public function testGetUrlValid() {
+	public function testGetUrlValid(): void {
 		$userFolder = $this->createMock(Folder::class);
 		$this->rootFolder->method('getUserFolder')
 			->with('awesomeUser')
@@ -124,9 +110,12 @@ class DirectControllerTest extends TestCase {
 		$this->timeFactory->method('getTime')
 			->willReturn(42);
 
-		$userFolder->method('getById')
+		$userFolder->method('getFirstNodeById')
 			->with(101)
-			->willReturn([$file]);
+			->willReturn($file);
+
+		$userFolder->method('getRelativePath')
+			->willReturn('/path');
 
 		$this->random->method('generate')
 			->with(
@@ -147,7 +136,7 @@ class DirectControllerTest extends TestCase {
 
 		$this->urlGenerator->method('getAbsoluteURL')
 			->willReturnCallback(function (string $url) {
-				return 'https://my.nextcloud/'.$url;
+				return 'https://my.nextcloud/' . $url;
 			});
 
 		$result = $this->controller->getUrl(101);

@@ -1,62 +1,54 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Christopher Schäpers <kondou@ts.unde.re>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Vincent Petry <vincent@nextcloud.com>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2017-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 namespace OCA\Files;
 
+use OC\NavigationManager;
+use OCA\Files\Service\ChunkedUploadConfig;
+use OCP\App\IAppManager;
+use OCP\EventDispatcher\IEventDispatcher;
+use OCP\IConfig;
+use OCP\IGroupManager;
+use OCP\INavigationManager;
+use OCP\IURLGenerator;
+use OCP\IUserSession;
+use OCP\L10N\IFactory;
+use OCP\Server;
+use Psr\Log\LoggerInterface;
+
 class App {
-	/**
-	 * @var \OCP\INavigationManager
-	 */
-	private static $navigationManager;
+	private static ?INavigationManager $navigationManager = null;
 
 	/**
 	 * Returns the app's navigation manager
-	 *
-	 * @return \OCP\INavigationManager
 	 */
-	public static function getNavigationManager() {
+	public static function getNavigationManager(): INavigationManager {
 		// TODO: move this into a service in the Application class
 		if (self::$navigationManager === null) {
-			self::$navigationManager = new \OC\NavigationManager(
-				\OC::$server->getAppManager(),
-				\OC::$server->getURLGenerator(),
-				\OC::$server->getL10NFactory(),
-				\OC::$server->getUserSession(),
-				\OC::$server->getGroupManager(),
-				\OC::$server->getConfig()
+			self::$navigationManager = new NavigationManager(
+				Server::get(IAppManager::class),
+				Server::get(IUrlGenerator::class),
+				Server::get(IFactory::class),
+				Server::get(IUserSession::class),
+				Server::get(IGroupManager::class),
+				Server::get(IConfig::class),
+				Server::get(LoggerInterface::class),
+				Server::get(IEventDispatcher::class),
 			);
 			self::$navigationManager->clear(false);
 		}
 		return self::$navigationManager;
 	}
 
-	public static function extendJsConfig($settings) {
+	public static function extendJsConfig($settings): void {
 		$appConfig = json_decode($settings['array']['oc_appconfig'], true);
 
-		$maxChunkSize = (int)\OC::$server->getConfig()->getAppValue('files', 'max_chunk_size', 10 * 1024 * 1024);
 		$appConfig['files'] = [
-			'max_chunk_size' => $maxChunkSize
+			'max_chunk_size' => ChunkedUploadConfig::getMaxChunkSize(),
 		];
 
 		$settings['array']['oc_appconfig'] = json_encode($appConfig);

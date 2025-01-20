@@ -1,36 +1,19 @@
 <?php
 /**
- * @copyright Copyright (c) 2016 Joas Schilling <coding@schilljs.com>
- *
- * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Julius Härtl <jus@bitgrid.net>
- * @author Richard Steinmetz <richard@steinmetz.cloud>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2016 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 namespace OCA\WorkflowEngine\Check;
 
+use OC\Files\Storage\Wrapper\Jail;
 use OCA\Files_Sharing\SharedStorage;
 use OCA\WorkflowEngine\Entity\File;
 use OCP\Files\Cache\ICache;
 use OCP\Files\IHomeStorage;
+use OCP\IGroupManager;
 use OCP\IL10N;
+use OCP\IUser;
+use OCP\IUserSession;
 use OCP\SystemTag\ISystemTagManager;
 use OCP\SystemTag\ISystemTagObjectMapper;
 use OCP\SystemTag\TagNotFoundException;
@@ -46,24 +29,13 @@ class FileSystemTags implements ICheck, IFileCheck {
 	/** @var array */
 	protected $fileSystemTags;
 
-	/** @var IL10N */
-	protected $l;
-
-	/** @var ISystemTagManager */
-	protected $systemTagManager;
-
-	/** @var ISystemTagObjectMapper */
-	protected $systemTagObjectMapper;
-
-	/**
-	 * @param IL10N $l
-	 * @param ISystemTagManager $systemTagManager
-	 * @param ISystemTagObjectMapper $systemTagObjectMapper
-	 */
-	public function __construct(IL10N $l, ISystemTagManager $systemTagManager, ISystemTagObjectMapper $systemTagObjectMapper) {
-		$this->l = $l;
-		$this->systemTagManager = $systemTagManager;
-		$this->systemTagObjectMapper = $systemTagObjectMapper;
+	public function __construct(
+		protected IL10N $l,
+		protected ISystemTagManager $systemTagManager,
+		protected ISystemTagObjectMapper $systemTagObjectMapper,
+		protected IUserSession $userSession,
+		protected IGroupManager $groupManager,
+	) {
 	}
 
 	/**
@@ -87,7 +59,18 @@ class FileSystemTags implements ICheck, IFileCheck {
 		}
 
 		try {
-			$this->systemTagManager->getTagsByIds($value);
+			$tags = $this->systemTagManager->getTagsByIds($value);
+
+			$user = $this->userSession->getUser();
+			$isAdmin = $user instanceof IUser && $this->groupManager->isAdmin($user->getUID());
+
+			if (!$isAdmin) {
+				foreach ($tags as $tag) {
+					if (!$tag->isUserVisible()) {
+						throw new \UnexpectedValueException($this->l->t('The given tag id is invalid'), 4);
+					}
+				}
+			}
 		} catch (TagNotFoundException $e) {
 			throw new \UnexpectedValueException($this->l->t('The given tag id is invalid'), 2);
 		} catch (\InvalidArgumentException $e) {
@@ -132,14 +115,15 @@ class FileSystemTags implements ICheck, IFileCheck {
 	 * @return int[]
 	 */
 	protected function getFileIds(ICache $cache, $path, $isExternalStorage) {
-		// TODO: Fix caching inside group folders
-		// Do not cache file ids inside group folders because multiple file ids might be mapped to
-		// the same combination of cache id + path.
-		$shouldCacheFileIds = !$this->storage
-			->instanceOfStorage(\OCA\GroupFolders\Mount\GroupFolderStorage::class);
 		$cacheId = $cache->getNumericStorageId();
-		if ($shouldCacheFileIds && isset($this->fileIds[$cacheId][$path])) {
-			return $this->fileIds[$cacheId][$path];
+		if ($this->storage->instanceOfStorage(Jail::class)) {
+			$absolutePath = $this->storage->getUnjailedPath($path);
+		} else {
+			$absolutePath = $path;
+		}
+
+		if (isset($this->fileIds[$cacheId][$absolutePath])) {
+			return $this->fileIds[$cacheId][$absolutePath];
 		}
 
 		$parentIds = [];
@@ -151,12 +135,10 @@ class FileSystemTags implements ICheck, IFileCheck {
 
 		$fileId = $cache->getId($path);
 		if ($fileId !== -1) {
-			$parentIds[] = $cache->getId($path);
+			$parentIds[] = $fileId;
 		}
 
-		if ($shouldCacheFileIds) {
-			$this->fileIds[$cacheId][$path] = $parentIds;
-		}
+		$this->fileIds[$cacheId][$absolutePath] = $parentIds;
 
 		return $parentIds;
 	}

@@ -1,9 +1,7 @@
 <?php
 /**
- * @copyright Copyright (c) 2016 Robin Appelman <robin@icewind.nl>
- * This file is licensed under the Licensed under the MIT license:
- * http://opensource.org/licenses/MIT
- *
+ * SPDX-FileCopyrightText: 2016 Robin Appelman <robin@icewind.nl>
+ * SPDX-License-Identifier: MIT
  */
 
 namespace Icewind\SMB\Wrapped;
@@ -65,16 +63,20 @@ class NotifyHandler implements INotifyHandler {
 	 */
 	public function listen(callable $callback): void {
 		if ($this->listening) {
-			$this->connection->read(function (string $line) use ($callback): bool {
+			while (true) {
+				$line = $this->connection->readLine();
+				if ($line === false) {
+					break;
+				}
 				$this->checkForError($line);
 				$change = $this->parseChangeLine($line);
 				if ($change) {
 					$result = $callback($change);
-					return $result === false ? false : true;
-				} else {
-					return true;
+					if ($result === false) {
+						break;
+					}
 				}
-			});
+			};
 		}
 	}
 

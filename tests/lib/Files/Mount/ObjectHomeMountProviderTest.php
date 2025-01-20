@@ -1,5 +1,9 @@
 <?php
-
+/**
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
 namespace Test\Files\Mount;
 
 use OC\Files\Mount\ObjectHomeMountProvider;
@@ -8,7 +12,6 @@ use OCP\IConfig;
 use OCP\IUser;
 
 class ObjectHomeMountProviderTest extends \Test\TestCase {
-
 	/** @var ObjectHomeMountProvider */
 	protected $provider;
 
@@ -31,7 +34,7 @@ class ObjectHomeMountProviderTest extends \Test\TestCase {
 		$this->provider = new ObjectHomeMountProvider($this->config);
 	}
 
-	public function testSingleBucket() {
+	public function testSingleBucket(): void {
 		$this->config->expects($this->once())
 			->method('getSystemValue')
 			->with($this->equalTo('objectstore'), '')
@@ -53,8 +56,8 @@ class ObjectHomeMountProviderTest extends \Test\TestCase {
 		$this->assertInstanceOf('Test\Files\Mount\FakeObjectStore', $config['arguments']['objectstore']);
 	}
 
-	public function testMultiBucket() {
-		$this->config->expects($this->once())
+	public function testMultiBucket(): void {
+		$this->config->expects($this->exactly(2))
 			->method('getSystemValue')
 			->with($this->equalTo('objectstore_multibucket'), '')
 			->willReturn([
@@ -97,10 +100,10 @@ class ObjectHomeMountProviderTest extends \Test\TestCase {
 		$this->assertEquals('49', $config['arguments']['bucket']);
 	}
 
-	public function testMultiBucketWithPrefix() {
-		$this->config->expects($this->once())
+	public function testMultiBucketWithPrefix(): void {
+		$this->config->expects($this->exactly(2))
 			->method('getSystemValue')
-			->with($this->equalTo('objectstore_multibucket'), '')
+			->with('objectstore_multibucket')
 			->willReturn([
 				'class' => 'Test\Files\Mount\FakeObjectStore',
 				'arguments' => [
@@ -144,10 +147,10 @@ class ObjectHomeMountProviderTest extends \Test\TestCase {
 		$this->assertEquals('myBucketPrefix49', $config['arguments']['bucket']);
 	}
 
-	public function testMultiBucketBucketAlreadySet() {
+	public function testMultiBucketBucketAlreadySet(): void {
 		$this->config->expects($this->once())
 			->method('getSystemValue')
-			->with($this->equalTo('objectstore_multibucket'), '')
+			->with('objectstore_multibucket')
 			->willReturn([
 				'class' => 'Test\Files\Mount\FakeObjectStore',
 				'arguments' => [
@@ -184,10 +187,10 @@ class ObjectHomeMountProviderTest extends \Test\TestCase {
 		$this->assertEquals('awesomeBucket1', $config['arguments']['bucket']);
 	}
 
-	public function testMultiBucketConfigFirst() {
-		$this->config->expects($this->once())
+	public function testMultiBucketConfigFirst(): void {
+		$this->config->expects($this->exactly(2))
 			->method('getSystemValue')
-			->with($this->equalTo('objectstore_multibucket'))
+			->with('objectstore_multibucket')
 			->willReturn([
 				'class' => 'Test\Files\Mount\FakeObjectStore',
 			]);
@@ -200,18 +203,18 @@ class ObjectHomeMountProviderTest extends \Test\TestCase {
 		$this->assertInstanceOf('OC\Files\Mount\MountPoint', $mount);
 	}
 
-	public function testMultiBucketConfigFirstFallBackSingle() {
-		$this->config->expects($this->at(0))
+	public function testMultiBucketConfigFirstFallBackSingle(): void {
+		$this->config->expects($this->exactly(2))
 			->method('getSystemValue')
-			->with($this->equalTo('objectstore_multibucket'))
-			->willReturn('');
-
-		$this->config->expects($this->at(1))
-			->method('getSystemValue')
-			->with($this->equalTo('objectstore'))
-			->willReturn([
-				'class' => 'Test\Files\Mount\FakeObjectStore',
-			]);
+			->withConsecutive(
+				[$this->equalTo('objectstore_multibucket')],
+				[$this->equalTo('objectstore')],
+			)->willReturnOnConsecutiveCalls(
+				'',
+				[
+					'class' => 'Test\Files\Mount\FakeObjectStore',
+				],
+			);
 
 		$this->user->method('getUID')
 			->willReturn('uid');
@@ -221,7 +224,7 @@ class ObjectHomeMountProviderTest extends \Test\TestCase {
 		$this->assertInstanceOf('OC\Files\Mount\MountPoint', $mount);
 	}
 
-	public function testNoObjectStore() {
+	public function testNoObjectStore(): void {
 		$this->config->expects($this->exactly(2))
 			->method('getSystemValue')
 			->willReturn('');

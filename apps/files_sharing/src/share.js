@@ -1,39 +1,14 @@
 /**
- * Copyright (c) 2014
- *
- * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Daniel Calviño Sánchez <danxuliu@gmail.com>
- * @author Joas Schilling <coding@schilljs.com>
- * @author John Molakvoæ <skjnldsv@protonmail.com>
- * @author Julius Härtl <jus@bitgrid.net>
- * @author Maxence Lange <maxence@nextcloud.com>
- * @author Michael Jobst <mjobst+github@tecratech.de>
- * @author Michael Jobst <mjobst@necls.com>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Samuel <faust64@gmail.com>
- * @author Vincent Petry <vincent@nextcloud.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2011-2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 /* eslint-disable */
 import escapeHTML from 'escape-html'
+
+import { ShareType } from '@nextcloud/sharing'
+import { getCapabilities } from '@nextcloud/capabilities'
 
 (function() {
 
@@ -70,7 +45,7 @@ import escapeHTML from 'escape-html'
 		 */
 		attach: function(fileList) {
 			// core sharing is disabled/not loaded
-			if (!OC.Share) {
+			if (!getCapabilities().files_sharing?.api_enabled) {
 				return
 			}
 			if (fileList.id === 'trashbin' || fileList.id === 'files.public') {
@@ -89,7 +64,15 @@ import escapeHTML from 'escape-html'
 					delete fileActions.actions.all.Details
 					delete fileActions.actions.all.Goto
 				}
+				if (_.isFunction(fileData.canDownload) && !fileData.canDownload()) {
+					delete fileActions.actions.all.Download
+					if ((fileData.permissions & OC.PERMISSION_UPDATE) === 0) {
+						// neither move nor copy is allowed, remove the action completely
+						delete fileActions.actions.all.MoveCopy
+					}
+				}
 				tr.attr('data-share-permissions', sharePermissions)
+				tr.attr('data-share-attributes', JSON.stringify(fileData.shareAttributes))
 				if (fileData.shareOwner) {
 					tr.attr('data-share-owner', fileData.shareOwner)
 					tr.attr('data-share-owner-id', fileData.shareOwnerId)
@@ -110,6 +93,7 @@ import escapeHTML from 'escape-html'
 			var oldElementToFile = fileList.elementToFile
 			fileList.elementToFile = function($el) {
 				var fileInfo = oldElementToFile.apply(this, arguments)
+				fileInfo.shareAttributes = JSON.parse($el.attr('data-share-attributes') || '[]')
 				fileInfo.sharePermissions = $el.attr('data-share-permissions') || undefined
 				fileInfo.shareOwner = $el.attr('data-share-owner') || undefined
 				fileInfo.shareOwnerId = $el.attr('data-share-owner-id') || undefined
@@ -164,30 +148,30 @@ import escapeHTML from 'escape-html'
 
 				_.each($files, function(file) {
 					var $tr = $(file)
-					var shareTypes = $tr.attr('data-share-types') || ''
+					var shareTypesStr = $tr.attr('data-share-types') || ''
 					var shareOwner = $tr.attr('data-share-owner')
-					if (shareTypes || shareOwner) {
+					if (shareTypesStr || shareOwner) {
 						var hasLink = false
 						var hasShares = false
-						_.each(shareTypes.split(',') || [], function(shareType) {
-							shareType = parseInt(shareType, 10)
-							if (shareType === OC.Share.SHARE_TYPE_LINK) {
+						_.each(shareTypesStr.split(',') || [], function(shareTypeStr) {
+							let shareType = parseInt(shareTypeStr, 10)
+							if (shareType === ShareType.Link) {
 								hasLink = true
-							} else if (shareType === OC.Share.SHARE_TYPE_EMAIL) {
+							} else if (shareType === ShareType.Email) {
 								hasLink = true
-							} else if (shareType === OC.Share.SHARE_TYPE_USER) {
+							} else if (shareType === ShareType.User) {
 								hasShares = true
-							} else if (shareType === OC.Share.SHARE_TYPE_GROUP) {
+							} else if (shareType === ShareType.Group) {
 								hasShares = true
-							} else if (shareType === OC.Share.SHARE_TYPE_REMOTE) {
+							} else if (shareType === ShareType.Remote) {
 								hasShares = true
-							} else if (shareType === OC.Share.SHARE_TYPE_REMOTE_GROUP) {
+							} else if (shareType === ShareType.RemoteGroup) {
 								hasShares = true
-							} else if (shareType === OC.Share.SHARE_TYPE_CIRCLE) {
+							} else if (shareType === ShareType.Team) {
 								hasShares = true
-							} else if (shareType === OC.Share.SHARE_TYPE_ROOM) {
+							} else if (shareType === ShareType.Room) {
 								hasShares = true
-							} else if (shareType === OC.Share.SHARE_TYPE_DECK) {
+							} else if (shareType === ShareType.Deck) {
 								hasShares = true
 							}
 						})
@@ -218,8 +202,8 @@ import escapeHTML from 'escape-html'
 				permissions: OC.PERMISSION_ALL,
 				iconClass: function(fileName, context) {
 					var shareType = parseInt(context.$file.data('share-types'), 10)
-					if (shareType === OC.Share.SHARE_TYPE_EMAIL
-						|| shareType === OC.Share.SHARE_TYPE_LINK) {
+					if (shareType === ShareType.Email
+						|| shareType === ShareType.Link) {
 						return 'icon-public'
 					}
 					return 'icon-shared'
@@ -318,7 +302,11 @@ import escapeHTML from 'escape-html'
 			var iconClass = 'icon-shared'
 			action.removeClass('shared-style')
 			// update folder icon
-			if (type === 'dir' && (hasShares || hasLink || ownerId)) {
+			var isEncrypted = $tr.attr('data-e2eencrypted')
+			if (type === 'dir' && isEncrypted === 'true') {
+				shareFolderIcon = OC.MimeType.getIconUrl('dir-encrypted')
+				$tr.attr('data-icon', shareFolderIcon)
+			} else if (type === 'dir' && (hasShares || hasLink || ownerId)) {
 				if (typeof mountType !== 'undefined' && mountType !== 'shared-root' && mountType !== 'shared') {
 					shareFolderIcon = OC.MimeType.getIconUrl('dir-' + mountType)
 				} else if (hasLink) {
@@ -329,13 +317,9 @@ import escapeHTML from 'escape-html'
 				$tr.find('.filename .thumbnail').css('background-image', 'url(' + shareFolderIcon + ')')
 				$tr.attr('data-icon', shareFolderIcon)
 			} else if (type === 'dir') {
-				var isEncrypted = $tr.attr('data-e2eencrypted')
 				// FIXME: duplicate of FileList._createRow logic for external folder,
 				// need to refactor the icon logic into a single code path eventually
-				if (isEncrypted === 'true') {
-					shareFolderIcon = OC.MimeType.getIconUrl('dir-encrypted')
-					$tr.attr('data-icon', shareFolderIcon)
-				} else if (mountType && mountType.indexOf('external') === 0) {
+				if (mountType && mountType.indexOf('external') === 0) {
 					shareFolderIcon = OC.MimeType.getIconUrl('dir-external')
 					$tr.attr('data-icon', shareFolderIcon)
 				} else {
@@ -365,7 +349,6 @@ import escapeHTML from 'escape-html'
 					avatarElement.each(function() {
 						$(this).avatar($(this).data('username'), 32)
 					})
-					action.find('span[title]').tooltip({ placement: 'top' })
 				}
 			} else {
 				action.html('<span class="hidden-visually">' + t('files_sharing', 'Shared') + '</span>').prepend(icon)
@@ -499,7 +482,6 @@ import escapeHTML from 'escape-html'
 					avatarElement.each(function() {
 						$(this).avatar($(this).data('username'), 32)
 					})
-					action.find('span[title]').tooltip({ placement: 'top' })
 				}
 			} else {
 				action.html('<span class="hidden-visually">' + t('files_sharing', 'Shared') + '</span>').prepend(icon)

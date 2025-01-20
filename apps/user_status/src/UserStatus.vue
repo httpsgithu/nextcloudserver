@@ -1,69 +1,70 @@
 <!--
-  - @copyright Copyright (c) 2020 Georg Ehrke <oc.list@georgehrke.com>
-  - @author Georg Ehrke <oc.list@georgehrke.com>
-  -
-  - @license GNU AGPL version 3 or any later version
-  -
-  - This program is free software: you can redistribute it and/or modify
-  - it under the terms of the GNU Affero General Public License as
-  - published by the Free Software Foundation, either version 3 of the
-  - License, or (at your option) any later version.
-  -
-  - This program is distributed in the hope that it will be useful,
-  - but WITHOUT ANY WARRANTY; without even the implied warranty of
-  - MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-  - GNU Affero General Public License for more details.
-  -
-  - You should have received a copy of the GNU Affero General Public License
-  - along with this program. If not, see <http://www.gnu.org/licenses/>.
-  -
-  -->
+  - SPDX-FileCopyrightText: 2020 Nextcloud GmbH and Nextcloud contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
+-->
 
 <template>
-	<li>
-		<div class="user-status-menu-item">
-			<!-- Username display -->
-			<span
-				v-if="!inline"
-				class="user-status-menu-item__header"
-				:title="displayName">
-				{{ displayName }}
-			</span>
+	<Fragment>
+		<NcListItem v-if="!inline"
+			class="user-status-menu-item"
+			compact
+			:name="visibleMessage"
+			@click.stop="openModal">
+			<template #icon>
+				<NcUserStatusIcon class="user-status-icon"
+					:status="statusType"
+					aria-hidden="true" />
+			</template>
+		</NcListItem>
 
-			<!-- Status modal toggle -->
-			<toggle :is="inline ? 'button' : 'a'"
-				:class="{'user-status-menu-item__toggle--inline': inline}"
-				class="user-status-menu-item__toggle"
-				href="#"
-				@click.prevent.stop="openModal">
-				<span :class="statusIcon" class="user-status-menu-item__toggle-icon" />
+		<div v-else>
+			<!-- Dashboard Status -->
+			<NcButton @click.stop="openModal">
+				<template #icon>
+					<NcUserStatusIcon class="user-status-icon"
+						:status="statusType"
+						aria-hidden="true" />
+				</template>
 				{{ visibleMessage }}
-			</toggle>
+			</NcButton>
 		</div>
-
 		<!-- Status management modal -->
-		<SetStatusModal
-			v-if="isModalOpen"
+		<SetStatusModal v-if="isModalOpen"
+			:inline="inline"
 			@close="closeModal" />
-	</li>
+	</Fragment>
 </template>
 
 <script>
 import { getCurrentUser } from '@nextcloud/auth'
+import { subscribe, unsubscribe } from '@nextcloud/event-bus'
+import { Fragment } from 'vue-frag'
+import NcButton from '@nextcloud/vue/dist/Components/NcButton.js'
+import NcListItem from '@nextcloud/vue/dist/Components/NcListItem.js'
+import NcUserStatusIcon from '@nextcloud/vue/dist/Components/NcUserStatusIcon.js'
 import debounce from 'debounce'
 
-import { sendHeartbeat } from './services/heartbeatService'
-import OnlineStatusMixin from './mixins/OnlineStatusMixin'
+import { sendHeartbeat } from './services/heartbeatService.js'
+import OnlineStatusMixin from './mixins/OnlineStatusMixin.js'
 
 export default {
 	name: 'UserStatus',
 
 	components: {
-		SetStatusModal: () => import(/* webpackChunkName: 'user-status-modal' */'./components/SetStatusModal'),
+		Fragment,
+		NcButton,
+		NcListItem,
+		NcUserStatusIcon,
+		SetStatusModal: () => import(/* webpackChunkName: 'user-status-modal' */'./components/SetStatusModal.vue'),
 	},
 	mixins: [OnlineStatusMixin],
 
 	props: {
+		/**
+		 * Whether the component should be rendered as a Dashboard Status or a User Menu Entries
+		 * true = Dashboard Status
+		 * false = User Menu Entries
+		 */
 		inline: {
 			type: Boolean,
 			default: false,
@@ -72,22 +73,12 @@ export default {
 
 	data() {
 		return {
-			isModalOpen: false,
 			heartbeatInterval: null,
-			setAwayTimeout: null,
-			mouseMoveListener: null,
 			isAway: false,
+			isModalOpen: false,
+			mouseMoveListener: null,
+			setAwayTimeout: null,
 		}
-	},
-	computed: {
-		/**
-		 * The display-name of the current user
-		 *
-		 * @returns {String}
-		 */
-		displayName() {
-			return getCurrentUser().displayName
-		},
 	},
 
 	/**
@@ -124,6 +115,7 @@ export default {
 
 			this._backgroundHeartbeat()
 		}
+		subscribe('user_status:status.updated', this.handleUserStatusUpdated)
 	},
 
 	/**
@@ -132,6 +124,7 @@ export default {
 	beforeDestroy() {
 		window.removeEventListener('mouseMove', this.mouseMoveListener)
 		clearInterval(this.heartbeatInterval)
+		unsubscribe('user_status:status.updated', this.handleUserStatusUpdated)
 	},
 
 	methods: {
@@ -151,7 +144,7 @@ export default {
 		/**
 		 * Sends the status heartbeat to the server
 		 *
-		 * @returns {Promise<void>}
+		 * @return {Promise<void>}
 		 * @private
 		 */
 		async _backgroundHeartbeat() {
@@ -166,62 +159,26 @@ export default {
 				console.debug('Failed sending heartbeat, got: ' + error.response?.status)
 			}
 		},
+		handleUserStatusUpdated(state) {
+			if (getCurrentUser()?.uid === state.userId) {
+				this.$store.dispatch('setStatusFromObject', {
+					status: state.status,
+					icon: state.icon,
+					message: state.message,
+				})
+			}
+		},
 	},
 }
 </script>
 
 <style lang="scss" scoped>
-$max-width-user-status: 200px;
-
-.user-status-menu-item {
-	&__header {
-		display: block;
-		overflow: hidden;
-		box-sizing: border-box;
-		max-width: $max-width-user-status;
-		padding: 10px 12px 5px 38px;
-		text-align: left;
-		white-space: nowrap;
-		text-overflow: ellipsis;
-		opacity: 1;
-		color: var(--color-text-maxcontrast);
-	}
-
-	&__toggle {
-		&-icon {
-			width: 16px;
-			height: 16px;
-			margin-right: 10px;
-			opacity: 1 !important;
-			background-size: 16px;
-		}
-
-		// In dashboard
-		&--inline {
-			width: auto;
-			min-width: 44px;
-			height: 44px;
-			margin: 0;
-			border: 0;
-			border-radius: var(--border-radius-pill);
-			background-color: var(--color-background-translucent);
-			font-size: inherit;
-			font-weight: normal;
-
-			-webkit-backdrop-filter: var(--background-blur);
-			backdrop-filter: var(--background-blur);
-
-			&:active,
-			&:hover,
-			&:focus {
-				background-color: var(--color-background-hover);
-			}
-		}
-	}
+.user-status-icon {
+	width: 20px;
+	height: 20px;
+	margin: calc((var(--default-clickable-area) - 20px) / 2); // 20px icon size
+	opacity: 1 !important;
+	background-size: 20px;
+	vertical-align: middle !important;
 }
-
-li {
-	list-style-type: none;
-}
-
 </style>

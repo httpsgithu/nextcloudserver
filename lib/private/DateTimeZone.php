@@ -1,33 +1,16 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Morris Jobke <hey@morrisjobke.de>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 namespace OC;
 
 use OCP\IConfig;
 use OCP\IDateTimeZone;
-use OCP\ILogger;
 use OCP\ISession;
+use Psr\Log\LoggerInterface;
 
 class DateTimeZone implements IDateTimeZone {
 	/** @var IConfig */
@@ -48,7 +31,7 @@ class DateTimeZone implements IDateTimeZone {
 	}
 
 	/**
-	 * Get the timezone of the current user, based on his session information and config data
+	 * Get the timezone of the current user, based on their session information and config data
 	 *
 	 * @param bool|int $timestamp
 	 * @return \DateTimeZone
@@ -65,7 +48,7 @@ class DateTimeZone implements IDateTimeZone {
 		try {
 			return new \DateTimeZone($timeZone);
 		} catch (\Exception $e) {
-			\OCP\Util::writeLog('datetimezone', 'Failed to created DateTimeZone "' . $timeZone . "'", ILogger::DEBUG);
+			\OC::$server->get(LoggerInterface::class)->debug('Failed to created DateTimeZone "' . $timeZone . '"', ['app' => 'datetimezone']);
 			return new \DateTimeZone($this->getDefaultTimeZone());
 		}
 	}
@@ -110,7 +93,7 @@ class DateTimeZone implements IDateTimeZone {
 			}
 
 			// No timezone found, fallback to UTC
-			\OCP\Util::writeLog('datetimezone', 'Failed to find DateTimeZone for offset "' . $offset . "'", ILogger::DEBUG);
+			\OC::$server->get(LoggerInterface::class)->debug('Failed to find DateTimeZone for offset "' . $offset . '"', ['app' => 'datetimezone']);
 			return new \DateTimeZone($this->getDefaultTimeZone());
 		}
 	}

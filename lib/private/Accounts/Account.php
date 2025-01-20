@@ -3,27 +3,8 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2018 Julius Härtl <jus@bitgrid.net>
- *
- * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Julius Härtl <jus@bitgrid.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2018 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 namespace OC\Accounts;
 
@@ -39,13 +20,11 @@ class Account implements IAccount {
 	use TAccountsHelper;
 
 	/** @var IAccountPropertyCollection[]|IAccountProperty[] */
-	private $properties = [];
+	private array $properties = [];
 
-	/** @var IUser */
-	private $user;
-
-	public function __construct(IUser $user) {
-		$this->user = $user;
+	public function __construct(
+		private IUser $user,
+	) {
 	}
 
 	public function setProperty(string $property, string $value, string $scope, string $verified, string $verificationData = ''): IAccount {
@@ -72,6 +51,28 @@ class Account implements IAccount {
 		});
 	}
 
+	public function setAllPropertiesFromJson(array $properties): IAccount {
+		foreach ($properties as $propertyName => $propertyObject) {
+			if ($this->isCollection($propertyName)) {
+				$collection = new AccountPropertyCollection($propertyName);
+				/** @var array<int, IAccountProperty> $collectionProperties */
+				$collectionProperties = [];
+				/** @var array<int, array<string, string>> $propertyObject */
+				foreach ($propertyObject as ['value' => $value, 'scope' => $scope, 'verified' => $verified, 'verificationData' => $verificationData]) {
+					$collectionProperties[] = new AccountProperty($collection->getName(), $value, $scope, $verified, $verificationData);
+				}
+				$collection->setProperties($collectionProperties);
+				$this->setPropertyCollection($collection);
+			} else {
+				/** @var array<string, string> $propertyObject */
+				['value' => $value, 'scope' => $scope, 'verified' => $verified, 'verificationData' => $verificationData] = $propertyObject;
+				$this->setProperty($propertyName, $value, $scope, $verified, $verificationData);
+			}
+		}
+
+		return $this;
+	}
+
 	public function getAllProperties(): Generator {
 		foreach ($this->properties as $propertyObject) {
 			if ($propertyObject instanceof IAccountProperty) {
@@ -84,7 +85,7 @@ class Account implements IAccount {
 		}
 	}
 
-	public function getFilteredProperties(string $scope = null, string $verified = null): array {
+	public function getFilteredProperties(?string $scope = null, ?string $verified = null): array {
 		$result = $incrementals = [];
 		/** @var IAccountProperty $obj */
 		foreach ($this->getAllProperties() as $obj) {
@@ -104,8 +105,16 @@ class Account implements IAccount {
 		return $result;
 	}
 
-	public function jsonSerialize() {
-		return $this->properties;
+	/** @return array<string, IAccountProperty|array<int, IAccountProperty>> */
+	public function jsonSerialize(): array {
+		$properties = $this->properties;
+		foreach ($properties as $propertyName => $propertyObject) {
+			if ($propertyObject instanceof IAccountPropertyCollection) {
+				// Override collection serialization to discard duplicate name
+				$properties[$propertyName] = $propertyObject->jsonSerialize()[$propertyName];
+			}
+		}
+		return $properties;
 	}
 
 	public function getUser(): IUser {

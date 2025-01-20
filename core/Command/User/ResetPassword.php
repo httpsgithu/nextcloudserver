@@ -1,34 +1,17 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Andreas Fischer <bantu@owncloud.com>
- * @author Christopher Schäpers <kondou@ts.unde.re>
- * @author Clark Tomlinson <fallen013@gmail.com>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Laurens Post <lkpost@scept.re>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Sujith H <sharidasan@owncloud.com>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 namespace OC\Core\Command\User;
 
+use OC\Core\Command\Base;
+use OCP\App\IAppManager;
+use OCP\IUser;
 use OCP\IUserManager;
-use Symfony\Component\Console\Command\Command;
+use Stecman\Component\Symfony\Console\BashCompletion\CompletionContext;
 use Symfony\Component\Console\Helper\QuestionHelper;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
@@ -37,13 +20,11 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Question\ConfirmationQuestion;
 use Symfony\Component\Console\Question\Question;
 
-class ResetPassword extends Command {
-
-	/** @var IUserManager */
-	protected $userManager;
-
-	public function __construct(IUserManager $userManager) {
-		$this->userManager = $userManager;
+class ResetPassword extends Base {
+	public function __construct(
+		protected IUserManager $userManager,
+		private IAppManager $appManager,
+	) {
 		parent::__construct();
 	}
 
@@ -54,7 +35,7 @@ class ResetPassword extends Command {
 			->addArgument(
 				'user',
 				InputArgument::REQUIRED,
-				'Username to reset password'
+				'Login to reset password'
 			)
 			->addOption(
 				'password-from-env',
@@ -84,7 +65,7 @@ class ResetPassword extends Command {
 			/** @var QuestionHelper $helper */
 			$helper = $this->getHelper('question');
 
-			if (\OCP\App::isEnabled('encryption')) {
+			if ($this->appManager->isEnabledForUser('encryption', $user)) {
 				$output->writeln(
 					'<error>Warning: Resetting the password when using encryption will result in data loss!</error>'
 				);
@@ -100,7 +81,7 @@ class ResetPassword extends Command {
 			$password = $helper->ask($input, $output, $question);
 
 			if ($password === null) {
-				$output->writeln("<error>Password cannot be empty!</error>");
+				$output->writeln('<error>Password cannot be empty!</error>');
 				return 1;
 			}
 
@@ -109,11 +90,11 @@ class ResetPassword extends Command {
 			$confirm = $helper->ask($input, $output, $question);
 
 			if ($password !== $confirm) {
-				$output->writeln("<error>Passwords did not match!</error>");
+				$output->writeln('<error>Passwords did not match!</error>');
 				return 1;
 			}
 		} else {
-			$output->writeln("<error>Interactive input or --password-from-env is needed for entering a new password!</error>");
+			$output->writeln('<error>Interactive input or --password-from-env is needed for entering a new password!</error>');
 			return 1;
 		}
 
@@ -126,11 +107,23 @@ class ResetPassword extends Command {
 		}
 
 		if ($success) {
-			$output->writeln("<info>Successfully reset password for " . $username . "</info>");
+			$output->writeln('<info>Successfully reset password for ' . $username . '</info>');
 		} else {
-			$output->writeln("<error>Error while resetting password!</error>");
+			$output->writeln('<error>Error while resetting password!</error>');
 			return 1;
 		}
 		return 0;
+	}
+
+	/**
+	 * @param string $argumentName
+	 * @param CompletionContext $context
+	 * @return string[]
+	 */
+	public function completeArgumentValues($argumentName, CompletionContext $context) {
+		if ($argumentName === 'user') {
+			return array_map(static fn (IUser $user) => $user->getUID(), $this->userManager->search($context->getCurrentWord()));
+		}
+		return [];
 	}
 }

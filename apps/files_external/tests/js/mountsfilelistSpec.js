@@ -1,25 +1,7 @@
 /**
- * Copyright (c) 2014 Vincent Petry <pvince81@owncloud.com>
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Vincent Petry <vincent@nextcloud.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2014-2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 describe('OCA.Files_External.FileList tests', function() {
@@ -31,21 +13,20 @@ describe('OCA.Files_External.FileList tests', function() {
 
 		// init parameters and test table elements
 		$('#testArea').append(
-			'<div id="app-content-container">' +
+			'<div id="app-content">' +
 			// init horrible parameters
-			'<input type="hidden" id="dir" value="/"></input>' +
 			'<input type="hidden" id="permissions" value="31"></input>' +
 			// dummy controls
-			'<div id="controls">' +
+			'<div class="files-controls">' +
 			'   <div class="actions creatable"></div>' +
 			'   <div class="notCreatable"></div>' +
 			'</div>' +
 			// dummy table
 			// TODO: at some point this will be rendered by the fileList class itself!
-			'<table id="filestable">' +
+			'<table class="files-filestable">' +
 			'<thead><tr>' +
-			'<th id="headerName" class="hidden column-name">' +
-			'	<div id="headerName-container">' +
+			'<th class="hidden column-name">' +
+			'	<div id="column-name-container">' +
 			'		<a class="name sort columntitle" data-sort="name"><span>Name</span><span class="sort-indicator"></span></a>' +
 			'	</div>' +
 			'</th>' +
@@ -56,10 +37,10 @@ describe('OCA.Files_External.FileList tests', function() {
 			'	<a class="scope sort columntitle" data-sort="scope"><span>Scope</span><span class="sort-indicator"></span></a>' +
 			'</th>' +
 			'</tr></thead>' +
-			'<tbody id="fileList"></tbody>' +
+			'<tbody class="files-fileList"></tbody>' +
 			'<tfoot></tfoot>' +
 			'</table>' +
-			'<div id="emptycontent">Empty content message</div>' +
+			'<div class="emptyfilelist emptycontent">Empty content message</div>' +
 			'</div>'
 		);
 	});
@@ -78,7 +59,7 @@ describe('OCA.Files_External.FileList tests', function() {
 
 		beforeEach(function() {
 			fileList = new OCA.Files_External.FileList(
-				$('#app-content-container')
+				$('#app-content')
 			);
 
 			reloading = fileList.reload();

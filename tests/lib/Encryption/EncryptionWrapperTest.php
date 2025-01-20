@@ -1,22 +1,8 @@
 <?php
 /**
- * @author Björn Schießle <schiessle@owncloud.com>
- *
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 
 namespace Test\Encryption;
@@ -24,22 +10,22 @@ namespace Test\Encryption;
 use OC\Encryption\EncryptionWrapper;
 use OC\Encryption\Manager;
 use OC\Memcache\ArrayCache;
-use OCP\Files\Storage;
-use OCP\ILogger;
+use OCP\Files\Storage\IDisableEncryptionStorage;
+use OCP\Files\Storage\IStorage;
+use Psr\Log\LoggerInterface;
 use Test\TestCase;
 
 class EncryptionWrapperTest extends TestCase {
-
-	/** @var  EncryptionWrapper */
+	/** @var EncryptionWrapper */
 	private $instance;
 
-	/** @var  \PHPUnit\Framework\MockObject\MockObject | \OCP\ILogger */
+	/** @var \PHPUnit\Framework\MockObject\MockObject | LoggerInterface */
 	private $logger;
 
-	/** @var  \PHPUnit\Framework\MockObject\MockObject | \OC\Encryption\Manager */
+	/** @var \PHPUnit\Framework\MockObject\MockObject | \OC\Encryption\Manager */
 	private $manager;
 
-	/** @var  \PHPUnit\Framework\MockObject\MockObject | \OC\Memcache\ArrayCache */
+	/** @var \PHPUnit\Framework\MockObject\MockObject | \OC\Memcache\ArrayCache */
 	private $arrayCache;
 
 	protected function setUp(): void {
@@ -47,8 +33,7 @@ class EncryptionWrapperTest extends TestCase {
 
 		$this->arrayCache = $this->createMock(ArrayCache::class);
 		$this->manager = $this->createMock(Manager::class);
-		$this->logger = $this->createMock(ILogger::class);
-		$this->logger = $this->createMock(ILogger::class);
+		$this->logger = $this->createMock(LoggerInterface::class);
 
 		$this->instance = new EncryptionWrapper($this->arrayCache, $this->manager, $this->logger);
 	}
@@ -57,8 +42,8 @@ class EncryptionWrapperTest extends TestCase {
 	/**
 	 * @dataProvider provideWrapStorage
 	 */
-	public function testWrapStorage($expectedWrapped, $wrappedStorages) {
-		$storage = $this->getMockBuilder(Storage::class)
+	public function testWrapStorage($expectedWrapped, $wrappedStorages): void {
+		$storage = $this->getMockBuilder(IStorage::class)
 			->disableOriginalConstructor()
 			->getMock();
 
@@ -90,7 +75,7 @@ class EncryptionWrapperTest extends TestCase {
 			[true, ['OCA\Files_Trashbin\Storage']],
 
 			// Do not wrap shared storages
-			[false, [Storage\IDisableEncryptionStorage::class]],
+			[false, [IDisableEncryptionStorage::class]],
 		];
 	}
 }

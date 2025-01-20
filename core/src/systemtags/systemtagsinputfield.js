@@ -1,26 +1,7 @@
 /**
- * Copyright (c) 2015
- *
- * @author Joas Schilling <coding@schilljs.com>
- * @author John Molakvoæ <skjnldsv@protonmail.com>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Vincent Petry <vincent@nextcloud.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 /* eslint-disable */
@@ -57,10 +38,10 @@ import templateSelection from './templates/selection.handlebars'
 		 *
 		 * @param {Object} [options]
 		 * @param {string} [options.objectType=files] object type for which tags are assigned to
-		 * @param {bool} [options.multiple=false] whether to allow selecting multiple tags
-		 * @param {bool} [options.allowActions=true] whether tags can be renamed/delete within the dropdown
-		 * @param {bool} [options.allowCreate=true] whether new tags can be created
-		 * @param {bool} [options.isAdmin=true] whether the user is an administrator
+		 * @param {boolean} [options.multiple=false] whether to allow selecting multiple tags
+		 * @param {boolean} [options.allowActions=true] whether tags can be renamed/delete within the dropdown
+		 * @param {boolean} [options.allowCreate=true] whether new tags can be created
+		 * @param {boolean} [options.isAdmin=true] whether the user is an administrator
 		 * @param {Function} options.initSelection function to convert selection to data
 		 */
 			initialize: function(options) {
@@ -177,7 +158,7 @@ import templateSelection from './templates/selection.handlebars'
 				var $item = $(ev.target).closest('.systemtags-item')
 				var tagId = $item.attr('data-id')
 				this.collection.get(tagId).destroy()
-				$(ev.target).tooltip('hide')
+				$(ev.target).tooltip('option', 'hide')
 				$item.closest('.select2-result').remove()
 				// TODO: spinner
 				return false
@@ -292,7 +273,7 @@ import templateSelection from './templates/selection.handlebars'
 				return templateResult(_.extend({
 					renameTooltip: t('core', 'Rename'),
 					allowActions: this._allowActions,
-					tagMarkup: this._isAdmin ? OC.SystemTags.getDescriptiveTag(data)[0].innerHTML : null,
+					tagMarkup: this._isAdmin ? OC.SystemTags.getDescriptiveTag(data).innerHTML : null,
 					isAdmin: this._isAdmin
 				}, data))
 			},
@@ -305,7 +286,7 @@ import templateSelection from './templates/selection.handlebars'
 		 */
 			_formatSelection: function(data) {
 				return templateSelection(_.extend({
-					tagMarkup: this._isAdmin ? OC.SystemTags.getDescriptiveTag(data)[0].innerHTML : null,
+					tagMarkup: this._isAdmin ? OC.SystemTags.getDescriptiveTag(data).innerHTML : null,
 					isAdmin: this._isAdmin
 				}, data))
 			},
